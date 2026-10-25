@@ -1,6 +1,7 @@
 // BlockPool.h: fixed-size stereo audio blocks handed between the audio thread and a worker thread. No Rack dependency.
-// The audio thread only take()s and give()s blocks (lock-free, never allocates or frees); the worker refill()s spares and
-// deletes returned blocks. One producer and one consumer per queue.
+// take() and give() are lock-free and never allocate or free. They run on the audio thread, or on another thread while
+// Rack's engine lock keeps process() out (onAdd / onReset): never from two threads at once. The worker refill()s spares
+// and deletes returned blocks. One producer and one consumer per queue.
 // Author: Ari Klopfer / A_Development. MIT
 #pragma once
 #include <atomic>
@@ -22,6 +23,7 @@ struct Block
 template <unsigned CAP>
 struct Spsc
 {
+    static_assert (CAP > 0 && (CAP & (CAP - 1)) == 0, "Spsc: CAP must be a power of two (the unsigned indices wrap)");
     Block* slot[CAP];
     std::atomic<unsigned> head { 0 }, tail { 0 };
 
@@ -52,7 +54,7 @@ struct BlockPool
     std::mutex freeLock;                    // held by the UI thread while it reads track blocks (save): freed blocks wait
     std::atomic<long> allocated { 0 };      // blocks alive, for the tests and the menu
 
-    // audio thread
+    // audio thread, or another thread while the engine lock excludes process(): never two threads at once
     Block* take() { return spare.pop(); }   // a zeroed block, or null when starved
     void give (Block* b) { if (b && ! freed.push (b)) leaked++; }   // ponytail: a full queue leaks the block (needs > 32768 frees between refills)
 

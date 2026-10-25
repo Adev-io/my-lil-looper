@@ -16,6 +16,7 @@ int main()
     testOverdubUndoRedo();
     testUndoMidOverdub();
     testReverseAndOneShot();
+    testRestart();
     testSeamFade();
     testCleanAndStarve();
     testBlockEdgeAndMaxLength();
