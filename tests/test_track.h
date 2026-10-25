@@ -124,6 +124,9 @@ void testOverdubUndoRedo()
     a.pressUndo();
     r.run (40, 0.f);
     check (near (r.read (0, 75), 1.5f) && ! a.isUndone(), "redo: the layer is back", r.read (0, 75));
+    const int p0 = a.pos;
+    for (int k = 0; k < 10; ++k) { a.pressUndo(); r.run (40, 0.f); }
+    check (a.pos == (p0 + 400) % a.len, "undo/redo: the play head stays in phase with the master", a.pos - (p0 + 400) % a.len);
 }
 
 void testUndoMidOverdub()

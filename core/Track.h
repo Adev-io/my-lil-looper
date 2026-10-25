@@ -113,7 +113,8 @@ struct Track
         const bool on = (state == PLAYING || state == OVERDUBBING) && ! swapPending && ! clearing && ! jumping;
         outGain = slew (outGain, on ? 1.f : 0.f);
         dubGain = slew (dubGain, on && state == OVERDUBBING ? 1.f : 0.f);
-        if (len > 0 && outGain > 0.f)
+        // The frame an undo fade reaches 0 still counts: a playing track stays in phase (a stopped one must not move)
+        if (len > 0 && (outGain > 0.f || (swapPending && (state == PLAYING || state == OVERDUBBING))))
         {
             Block* b = blocks[pos / BLOCK];
             const int i = pos % BLOCK;
