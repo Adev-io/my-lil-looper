@@ -223,6 +223,7 @@ private:
         for (int i = 0; i < nBlocks; ++i) { Block* u = undo[i]; undo[i] = nullptr; pool.give (u); }   // unpublish, then give
         undoCount = 0;
         undone = false;
+        pending = NONE;   // an armed 1SHOT retrigger would end the overdub at the next downbeat
         state = OVERDUBBING;
         version++;
     }

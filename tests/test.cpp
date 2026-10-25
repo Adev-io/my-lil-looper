@@ -23,6 +23,7 @@ int main()
     testBlockEdgeAndMaxLength();
     testStopClearAll();
     testAdoptAndWav();
+    testWavHardening();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }

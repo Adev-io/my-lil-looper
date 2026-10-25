@@ -172,6 +172,16 @@ void testReverseAndOneShot()
     float prev = r.outL[0], step = 0.f;
     for (int i = 0; i < 300; ++i) { r.frame (0.f); step = std::max (step, std::abs (r.outL[0] - prev)); prev = r.outL[0]; }
     check (a.state == Track::STOPPED && step <= 0.2001f, "one-shot: the end fades out, no click", step);
+    a.oneShot = false;
+    a.pressRec (*r.pool);
+    while (a.state != Track::PLAYING) r.frame (0.f);
+    r.run (10, 0.f);       // playing, synced to the master
+    a.oneShot = true;
+    a.pressRec (*r.pool);  // retrigger armed for the next downbeat
+    a.oneShot = false;
+    a.pressRec (*r.pool);  // overdub instead
+    r.run (2 * a.len, 0.f);
+    check (a.state == Track::OVERDUBBING, "one-shot: an overdub drops the armed retrigger", a.state);
 }
 
 // Max step between neighbouring outputs of track 0 over n frames.

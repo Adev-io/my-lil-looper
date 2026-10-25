@@ -45,6 +45,10 @@ struct Looper : Module
     float blinkTime = 0.f;
     float appliedRate = 0.f;
     int appliedMinutes = 0;
+    // The rate the loop frames (tracks and master) are counted in. Set when that frame space is (re)defined: at load and
+    // while the looper is empty. A later engine rate change keeps it: the frames keep their meaning, the pitch shifts.
+    float loopRate = 48000.f;
+    double savedMaster = 0, savedRate = 0;   // the patch's master and loopRate, from dataFromJson for onAdd
 
     std::atomic<bool> working { true };
     std::thread worker;
@@ -168,6 +172,7 @@ struct Looper : Module
             sumR += r;
         }
         if (allEmpty && sync.masterLen > 0) sync.clear();
+        if (allEmpty && loopRate != args.sampleRate) loopRate = args.sampleRate;
         outputs[OUT_L_OUTPUT].setVoltage (sumL);
         outputs[OUT_R_OUTPUT].setVoltage (sumR);
         face.push (clamp ((sumL + sumR) / 10.f, -1.f, 1.f), args.sampleRate);
@@ -217,7 +222,7 @@ struct Looper : Module
     void onSave (const SaveEvent&) override
     {
         const std::string dir = createPatchStorageDirectory();
-        const int rate = (int) APP->engine->getSampleRate();
+        const int rate = (int) std::lround (loopRate);
         std::lock_guard<std::mutex> hold (pool.freeLock);
         for (int i = 0; i < N; ++i)
         {
@@ -233,46 +238,75 @@ struct Looper : Module
                 continue;
             }
             std::vector<loop::Block*> list (t.blocks, t.blocks + nb);
+            const std::string tmp = path + ".tmp";   // the old file stays until the new one is whole
             wav::Writer w;
-            if (! w.open (path, rate)) { WARN ("Looper: cannot write %s", path.c_str()); continue; }
+            if (! w.open (tmp, rate)) { WARN ("Looper: cannot write %s", tmp.c_str()); continue; }
             bool whole = true;
             for (int b = 0; b * loop::BLOCK < len && whole; ++b)
             {
                 whole = b < nb && list[b];
                 if (whole) w.write (list[b]->l, list[b]->r, std::min (loop::BLOCK, len - b * loop::BLOCK));
             }
-            if (w.close() && whole) savedVersion[i] = v;
-            else WARN ("Looper: track %d not saved", i + 1);
+            if (w.close() && whole && system::rename (tmp, path)) savedVersion[i] = v;
+            else
+            {
+                system::remove (tmp);
+                WARN ("Looper: track %d not saved", i + 1);
+            }
         }
     }
 
-    // Patch load (after dataFromJson; the engine does not run process() meanwhile): read the saved tracks.
+    // Patch load (after dataFromJson: Rack's Engine::fromJson runs module->fromJson, then addModule -> onAdd; the engine
+    // does not run process() meanwhile): read the saved tracks, each from its own rate to the engine's.
     void onAdd (const AddEvent&) override
     {
         const std::string dir = getPatchStorageDirectory();
-        const int rate = (int) APP->engine->getSampleRate();
+        const int rate = (int) std::lround (APP->engine->getSampleRate());
+        const int64_t cap = (int64_t) loop::MAX_BLOCKS * loop::BLOCK;
+        loopRate = (float) rate;
+        const double oldMaster = savedMaster, oldRate = savedRate;
+        savedMaster = savedRate = 0;
+        const int64_t master = oldMaster > 0 ? (int64_t) std::min ((double) cap, std::round (oldMaster * rate / oldRate)) : 0;
+        if (master > 0) sync.setMaster ((int) master);   // no tracks load: process() clears it again
         for (int i = 0; i < N; ++i)
         {
             const std::string path = trackPath (dir, i);
             if (! system::exists (path)) continue;
-            std::vector<float> l, r;
-            int fileRate = 0;
-            if (! wav::read (path, l, r, fileRate)) { WARN ("Looper: cannot read %s", path.c_str()); continue; }
-            l = wav::resample (l, fileRate, rate);
-            r = wav::resample (r, fileRate, rate);
-            const int n = (int) std::min (l.size(), (size_t) loop::MAX_BLOCKS * loop::BLOCK);
             std::vector<loop::Block*> list;
-            for (int at = 0; at < n; at += loop::BLOCK)
+            try
             {
-                loop::Block* b = pool.make();
-                if (! b) break;
-                const int k = std::min (loop::BLOCK, n - at);
-                std::copy (l.begin() + at, l.begin() + at + k, b->l);
-                std::copy (r.begin() + at, r.begin() + at + k, b->r);
-                list.push_back (b);
+                std::vector<float> l, r;
+                int fileRate = 0;
+                if (! wav::read (path, l, r, fileRate, cap, rate)) { WARN ("Looper: cannot read %s", path.c_str()); continue; }
+                // A loop saved as k masters comes back as exactly k masters, so it stays on the downbeats.
+                const int64_t len = (int64_t) l.size(), k = oldMaster > 0 ? std::llround (len / oldMaster) : 0;
+                const bool snap = master > 0 && fileRate == oldRate && k >= 1 && std::abs (len - k * oldMaster) <= 1 && k * master <= cap;
+                const size_t want = snap ? (size_t) (k * master) : (size_t) std::max (1LL, std::llround ((double) len * rate / fileRate));
+                l = wav::resample (l, want);
+                r = wav::resample (r, want);
+                const int n = (int) std::min ((int64_t) l.size(), cap);
+                if ((int64_t) l.size() >= cap) WARN ("Looper: track %d cut to the %d-block maximum", i + 1, loop::MAX_BLOCKS);
+                list.reserve ((n + loop::BLOCK - 1) / loop::BLOCK);   // push_back cannot throw with a block in hand
+                for (int at = 0; at < n; at += loop::BLOCK)
+                {
+                    loop::Block* b = pool.make();
+                    if (! b) { WARN ("Looper: out of memory, track %d cut to %d frames", i + 1, at); break; }
+                    list.push_back (b);
+                    const int m = std::min (loop::BLOCK, n - at);
+                    for (int j = 0; j < m; ++j)   // adopted audio skips Track::write(): clean it here
+                    {
+                        b->l[j] = loop::clean (l[at + j]);
+                        b->r[j] = loop::clean (r[at + j]);
+                    }
+                }
+                tracks[i].adopt (list.data(), (int) list.size(), n, pool);
+                savedVersion[i] = tracks[i].version;
             }
-            tracks[i].adopt (list.data(), (int) list.size(), n, pool);
-            savedVersion[i] = tracks[i].version;
+            catch (const std::exception& e)   // one escaping onAdd takes Rack down
+            {
+                WARN ("Looper: cannot load track %d: %s", i + 1, e.what());
+                for (loop::Block* b : list) pool.give (b);
+            }
         }
     }
 
@@ -284,7 +318,7 @@ struct Looper : Module
         json_object_set_new (root, "perBar", json_integer (perBar));
         json_object_set_new (root, "maxMinutes", json_integer (maxMinutes));
         json_object_set_new (root, "masterLen", json_integer (sync.masterLen));
-        json_object_set_new (root, "sampleRate", json_integer ((int) APP->engine->getSampleRate()));
+        json_object_set_new (root, "sampleRate", json_integer (std::lround (loopRate)));
         return root;
     }
 
@@ -294,10 +328,15 @@ struct Looper : Module
         if (json_t* j = json_object_get (root, "monitor")) monitor = json_boolean_value (j);
         if (json_t* j = json_object_get (root, "perBar")) perBar = std::max (1, (int) json_integer_value (j));
         if (json_t* j = json_object_get (root, "maxMinutes")) maxMinutes = clamp ((int) json_integer_value (j), 1, 10);
+        bool empty = true;   // a preset or paste onto a module with loops keeps its master
+        for (loop::Track& t : tracks) empty = empty && t.state == loop::Track::EMPTY;
         json_t* m = json_object_get (root, "masterLen");
         json_t* s = json_object_get (root, "sampleRate");
-        if (m && s && json_integer_value (m) > 0 && json_integer_value (s) > 0)   // no tracks load: process() clears it again
-            sync.setMaster ((int) std::llround ((double) json_integer_value (m) * APP->engine->getSampleRate() / json_integer_value (s)));
+        if (empty && m && s && json_integer_value (m) > 0 && json_integer_value (s) > 0)
+        {
+            savedMaster = (double) json_integer_value (m);
+            savedRate = (double) json_integer_value (s);
+        }
     }
 };
 
