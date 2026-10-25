@@ -24,4 +24,9 @@ void testSync()
     c.tick (true, true, false);   // pulse 1 of 2
     check (c.tick (true, true, true), "sync: RESET makes the next pulse a downbeat");
     check (c.synced(), "sync: clocked is synced");
+    Sync r;
+    r.tick (true, true, false);
+    r.tick (true, true, false);   // 2 of 4 pulses seen
+    for (int i = 0; i < 3; ++i) r.tick (false, false, false);   // cable pulled
+    check (r.tick (true, true, false), "sync: first clock edge after re-patching is a downbeat");
 }

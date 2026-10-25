@@ -22,6 +22,7 @@ struct Sync
     // One frame. Returns true when this frame is a downbeat.
     bool tick (bool clockPatched, bool clockEdge, bool reset)
     {
+        if (clockPatched && ! clocked) pulses = 0;   // first edge after patching is a downbeat
         clocked = clockPatched;
         if (reset) { pulses = 0; masterPos = 0; }
         bool beat = false;
