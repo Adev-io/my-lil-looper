@@ -226,6 +226,7 @@ struct Looper : Module
         std::lock_guard<std::mutex> hold (pool.freeLock);
         for (int i = 0; i < N; ++i)
         {
+            system::remove (trackPath (dir, i) + ".tmp");   // left by a crash mid-save: it would ride along in every .vcv
             loop::Track& t = tracks[i];
             const unsigned v = t.version;   // ponytail: plain reads of audio-thread fields; a save mid-overdub can catch a half-written block
             if (v == savedVersion[i]) continue;
@@ -278,6 +279,7 @@ struct Looper : Module
                 std::vector<float> l, r;
                 int fileRate = 0;
                 if (! wav::read (path, l, r, fileRate, cap, rate)) { WARN ("Looper: cannot read %s", path.c_str()); continue; }
+                if (l.empty()) { WARN ("Looper: %s holds no audio", path.c_str()); continue; }   // not a 1-frame loop
                 // A loop saved as k masters comes back as exactly k masters, so it stays on the downbeats.
                 const int64_t len = (int64_t) l.size(), k = oldMaster > 0 ? std::llround (len / oldMaster) : 0;
                 const bool snap = master > 0 && fileRate == oldRate && k >= 1 && std::abs (len - k * oldMaster) <= 1 && k * master <= cap;
@@ -300,7 +302,8 @@ struct Looper : Module
                     }
                 }
                 tracks[i].adopt (list.data(), (int) list.size(), n, pool);
-                savedVersion[i] = tracks[i].version;
+                // Resampled or snapped: the file no longer matches loopRate and the master, so the next save rewrites it.
+                savedVersion[i] = tracks[i].version - (fileRate != rate || (int64_t) want != len ? 1u : 0u);
             }
             catch (const std::exception& e)   // one escaping onAdd takes Rack down
             {

@@ -88,8 +88,8 @@ inline bool read (const std::string& path, std::vector<float>& l, std::vector<fl
         else if (std::memcmp (id, "data", 4) == 0)
         {
             if (fmt != 3 || bits != 32 || (ch != 1 && ch != 2) || sr < 1000 || sr > 768000) break;
-            const int64_t cap = toRate > 0 ? (int64_t) std::ceil ((double) maxFrames * sr / toRate) + 1 : maxFrames;
-            const size_t n = (size_t) std::min ((int64_t) (len / (4u * ch)), std::max ((int64_t) 0, cap));
+            const double cap = toRate > 0 ? std::ceil ((double) maxFrames * sr / toRate) + 1 : (double) maxFrames;   // double: no overflow
+            const size_t n = (size_t) std::min ((double) (len / (4u * ch)), std::max (0.0, cap));
             l.resize (n); r.resize (n);
             float buf[2048];
             for (size_t i = 0; i < n && ok;)   // in pieces: no interleaved copy of the whole file

@@ -69,6 +69,7 @@ void testWavHardening()
         std::FILE* f = wavHeader (p); fmtChunk (f, 1, 48000); monoData (f, 100);
         const bool capped = wav::read (p, L, R, sr, 10) && L.size() == 10 && R.size() == 10;
         check (capped && wav::read (p, L, R, sr, 10, 24000) && L.size() == 21, "wav: the frame cap holds (and scales to the target rate, + 1)");
+        check (wav::read (p, L, R, sr, INT64_MAX, 24000) && L.size() == 100, "wav: no cap with a target rate reads every frame");
     }
     {   // odd chunk padded to even, fmt longer than 16: still a good file
         std::FILE* f = wavHeader (p); std::fwrite ("LIST", 1, 4, f); put32 (f, 3); std::fwrite ("abc\0", 1, 4, f);
