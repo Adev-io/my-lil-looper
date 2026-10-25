@@ -1,0 +1,18 @@
+{
+  "slug": "MyLilLooper",
+  "name": "My lil Looper",
+  "version": "2.0.0",
+  "license": "MIT",
+  "brand": "A_Development",
+  "author": "Ari Klopfer",
+  "authorEmail": "",
+  "authorUrl": "",
+  "pluginUrl": "",
+  "manualUrl": "https://github.com/Adev-io/my-lil-looper#readme",
+  "sourceUrl": "https://github.com/Adev-io/my-lil-looper",
+  "donateUrl": "",
+  "changelogUrl": "",
+  "modules": [
+    { "slug": "Looper", "name": "Looper", "description": "Five-track stereo live looper: record, overdub with undo, reverse and one-shot per track, synced to the first loop or a clock", "tags": ["Recording", "Sampler", "Polyphonic"] }
+  ]
+}
