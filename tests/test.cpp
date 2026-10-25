@@ -4,6 +4,7 @@
 #include "test_pool.h"
 #include "test_sync.h"
 #include "test_track.h"
+#include "test_wav.h"
 #include "FaceTap.h"
 
 int main()
@@ -21,6 +22,7 @@ int main()
     testCleanAndStarve();
     testBlockEdgeAndMaxLength();
     testStopClearAll();
+    testAdoptAndWav();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }
