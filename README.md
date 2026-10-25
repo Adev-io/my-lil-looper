@@ -28,6 +28,8 @@ later loop closes on a downbeat too, so its length is a whole multiple of the ma
 
 Patch a **CLOCK** and the downbeats are clock bars instead (right-click: *Clock pulses per bar*, default 4).
 **RESET** makes the next clock pulse the downbeat and sends every playing track back to the top (a 5 ms fade, so no click).
+RESET while a track is recording moves the downbeat, so that loop may not close on a whole multiple of the master.
+With a clock, tracks jump at RESET and the next clock pulse is the downbeat: reset while the clock runs.
 Loops are not time-stretched: change the clock tempo after recording and the loops drift against it.
 
 **ALL** stops everything that plays; when nothing plays, it starts every track that has audio, together, on the next downbeat.
@@ -40,7 +42,7 @@ Loops are not time-stretched: change the clock tempo after recording and the loo
 | OUT L / OUT R | Mix of all tracks. |
 | CLOCK, RESET | See Sync. |
 | REC, STOP, CLEAR | Poly triggers: channel n presses track n's REC/PLAY, STOP, or clears it. A mono cable reaches track 1 only. |
-| LEVEL | Poly CV: channel n scales track n, 10 V = full level. |
+| LEVEL | Poly CV: channel n scales track n, 10 V = full level. A mono cable reaches track 1 only. |
 
 ## Right-click menu
 
@@ -53,8 +55,10 @@ Loops are not time-stretched: change the clock tempo after recording and the loo
 
 Loops are saved with the patch (one WAV per track in the patch's storage folder) and come back stopped when you reopen
 it; press ALL to start them. A patch saved while a track is still recording leaves that track empty.
-Changing Rack's sample rate mid-session keeps the loops in sync but shifts their pitch. After saving and reopening, loops
-recorded before the change come back at the right pitch; loops recorded after it stay shifted.
+Changing Rack's sample rate mid-session keeps the loops in sync but shifts the pitch of loops recorded before the change.
+After saving and reopening, those come back at the right pitch, and loops recorded after the change come back shifted
+by the rate ratio.
+Undo of delete, and Rack's crash recovery, bring back the loops as of the last patch save.
 Duplicate (Ctrl+D) copies the loops; copy and paste of a selection copies the settings only.
 
 ## Building
