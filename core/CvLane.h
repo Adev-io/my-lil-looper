@@ -1,6 +1,6 @@
 // CvLane.h: one lane of the Looper CV expander. It follows its audio track's play head, which the Looper sends every frame
-// (CvMsg): records a poly CV while the track records, plays it back while the track plays, 0 V otherwise. CV is recorded
-// on the first take only; overdub, undo and redo leave it alone. One poly sample every D frames (about 3 kHz), held on
+// (CvMsg): records a poly CV while the track records, plays it back while the track plays, 0 V otherwise. Each new recording
+// records CV; overdub, undo and redo leave it alone. One poly sample every D frames (about 3 kHz), held on
 // playback, in pool blocks used as flat float storage. Audio thread: no allocation. No Rack dependency.
 // Author: Ari Klopfer / A_Development. MIT
 #pragma once
