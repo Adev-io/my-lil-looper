@@ -5,6 +5,7 @@
 #include "layout.hpp"
 #include "Pad.hpp"
 #include "BlockPool.h"
+#include "CountIn.h"
 #include "Sync.h"
 #include "Track.h"
 #include "Wav.h"
@@ -15,19 +16,25 @@
 
 static const int PER_BAR[] = { 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 96 };
 static const int MAX_MINUTES[] = { 1, 2, 5, 10 };
+static const int TAKE_BARS[] = { 1, 2, 4, 8 };
 
 struct Looper : Module
 {
     static constexpr int N = 5;
     enum ParamId { ENUMS (REC_PARAM, N), ENUMS (STOP_PARAM, N), ENUMS (UNDO_PARAM, N), ENUMS (REV_PARAM, N), ENUMS (ONESHOT_PARAM, N),
-                   ENUMS (LEVEL_PARAM, N), ALL_PARAM, PARAMS_LEN };
-    enum InputId { ENUMS (TRACK_INPUT, N), IN_L_INPUT, IN_R_INPUT, CLOCK_INPUT, RESET_INPUT, REC_INPUT, STOP_INPUT, CLEAR_INPUT, LEVEL_INPUT, INPUTS_LEN };
+                   ENUMS (LEVEL_PARAM, N), ALL_PARAM, COUNT_PARAM, BARS_PARAM, ENUMS (CLEAR_PARAM, N), CLEARALL_PARAM, PARAMS_LEN };
+    enum InputId { ENUMS (TRACK_INPUT, N), IN_L_INPUT, IN_R_INPUT, CLOCK_INPUT, RESET_INPUT, REC_INPUT, STOP_INPUT, CLEAR_INPUT, LEVEL_INPUT, COUNT_INPUT, INPUTS_LEN };
     enum OutputId { ENUMS (TRACK_OUTPUT, N), OUT_L_OUTPUT, OUT_R_OUTPUT, OUTPUTS_LEN };
-    enum LightId { ENUMS (PAD_LIGHT, 2 * N), ENUMS (UNDO_LIGHT, 2 * N), ENUMS (REV_LIGHT, N), ENUMS (ONESHOT_LIGHT, N), ENUMS (ALL_LIGHT, 2), LIGHTS_LEN };
+    enum LightId { ENUMS (PAD_LIGHT, 2 * N), ENUMS (UNDO_LIGHT, 2 * N), ENUMS (REV_LIGHT, N), ENUMS (ONESHOT_LIGHT, N), ENUMS (ALL_LIGHT, 2),
+                   ENUMS (COUNT_LIGHT, 2), ENUMS (CNT_LIGHT, 2 * 4), LIGHTS_LEN };
 
     loop::BlockPool pool;
     loop::Sync sync;
     loop::Track tracks[N];
+    loop::CountIn countIn;
+    int ciTrack = -1;        // the track the count-in records on: the first empty one when it starts
+    float ciRefused = 0.f;   // seconds left of the "cannot start" flash
+    float ciFlash = 0.f;     // seconds left of the "GO pressed" lime flash
     FaceTap face;   // the mascot's mouth: the main out
     unsigned savedVersion[N] = {};
 
@@ -37,8 +44,8 @@ struct Looper : Module
     int perBar = 4;
     int maxMinutes = 5;
 
-    dsp::BooleanTrigger recBtn[N], stopBtn[N], undoBtn[N], allBtn;
-    dsp::SchmittTrigger recTrig[N], stopTrig[N], clearTrig[N], clockTrig, resetTrig;
+    dsp::BooleanTrigger recBtn[N], stopBtn[N], undoBtn[N], clearBtn[N], allBtn, countBtn, clearAllBtn;
+    dsp::SchmittTrigger recTrig[N], stopTrig[N], clearTrig[N], clockTrig, resetTrig, countTrig;
     float stopHeld[N] = {};
     bool stopCleared[N] = {};
     dsp::ClockDivider lightDiv;
@@ -65,10 +72,15 @@ struct Looper : Module
             configSwitch (REV_PARAM + i, 0.f, 1.f, 0.f, t + " reverse", { "Off", "On" });
             configSwitch (ONESHOT_PARAM + i, 0.f, 1.f, 0.f, t + " one-shot", { "Off", "On" });
             configParam (LEVEL_PARAM + i, 0.f, 2.f, 1.f, t + " level", " dB", -10.f, 20.f);
+            configButton (CLEAR_PARAM + i, t + " clear");
             configInput (TRACK_INPUT + i, t + " input (poly: 1 = L, 2 = R; overrides IN L/R)");
             configOutput (TRACK_OUTPUT + i, t + " output (poly: 1 = L, 2 = R)");
         }
         configButton (ALL_PARAM, "All start / stop");
+        configButton (CLEARALL_PARAM, "Clear all tracks");
+        configButton (COUNT_PARAM, "Count-in take (wait for the bar, count 1 2 3 4, record, close; press again to cancel)");
+        configSwitch (BARS_PARAM, 0.f, 3.f, 2.f, "Count-in take length", { "1 bar", "2 bars", "4 bars", "8 bars" });
+        configInput (COUNT_INPUT, "Count-in trigger");
         configInput (IN_L_INPUT, "Left");
         configInput (IN_R_INPUT, "Right (normalled to left)");
         configInput (CLOCK_INPUT, "Clock (record and play snap to its bars)");
@@ -117,10 +129,12 @@ struct Looper : Module
         if (allBtn.process (params[ALL_PARAM].getValue() > 0.f))
             for (loop::Track& t : tracks) { if (anyRunning) t.stopAll(); else t.armPlay(); }
 
+        const bool clearAll = clearAllBtn.process (params[CLEARALL_PARAM].getValue() > 0.f);
         for (int i = 0; i < N; ++i)
         {
             loop::Track& t = tracks[i];
             t.dubAfterRec = dubAfterRec;
+            if (clearBtn[i].process (params[CLEAR_PARAM + i].getValue() > 0.f) || clearAll) t.requestClear (pool);
             t.reverse = params[REV_PARAM + i].getValue() > 0.5f;
             t.oneShot = params[ONESHOT_PARAM + i].getValue() > 0.5f;
             const bool rec = recBtn[i].process (params[REC_PARAM + i].getValue() > 0.f);
@@ -141,6 +155,25 @@ struct Looper : Module
         const bool edge = clockTrig.process (inputs[CLOCK_INPUT].getVoltage(), 0.1f, 1.f);
         const bool beat = sync.tick (inputs[CLOCK_INPUT].isConnected(), edge, reset);
         if (reset) for (loop::Track& t : tracks) t.rewind();
+
+        // Count-in: runs after the clock tick and before the tracks, so its REC press lands in the frame it is made.
+        countIn.bars = TAKE_BARS[clamp ((int) std::round (params[BARS_PARAM].getValue()), 0, 3)];
+        const bool countBtnEdge = countBtn.process (params[COUNT_PARAM].getValue() > 0.f);
+        const bool countJackEdge = countTrig.process (inputs[COUNT_INPUT].getVoltage(), 0.1f, 1.f);
+        const bool countStart = countBtnEdge || countJackEdge;
+        if (countIn.phase == loop::CountIn::IDLE)
+        {
+            ciTrack = -1;
+            for (int i = 0; i < N && ciTrack < 0; ++i) if (tracks[i].state == loop::Track::EMPTY && tracks[i].pending == loop::Track::NONE) ciTrack = i;
+        }
+        const loop::Track* ct = ciTrack >= 0 ? &tracks[ciTrack] : nullptr;
+        const bool ciFree = ct && sync.clocked && sync.perBar >= 4 && ct->state == loop::Track::EMPTY && ct->pending == loop::Track::NONE;
+        const bool ciRec = ct && ct->state == loop::Track::RECORDING;
+        const bool wasIdle = countIn.phase == loop::CountIn::IDLE;
+        if (countIn.step (countStart, edge, sync.edgePos, sync.perBar, ciFree, ciRec, reset) == loop::CountIn::PRESS && ciTrack >= 0)
+            tracks[ciTrack].pressRec (pool);
+        if (countStart) ciFlash = 0.4f;
+        if (countStart && wasIdle && countIn.phase == loop::CountIn::IDLE) ciRefused = 1.2f;   // no clock, under 4 pulses a bar, or no empty track
 
         const float mainL = inputs[IN_L_INPUT].getVoltage();
         const float mainR = inputs[IN_R_INPUT].isConnected() ? inputs[IN_R_INPUT].getVoltage() : mainL;
@@ -203,6 +236,33 @@ struct Looper : Module
         }
         lights[ALL_LIGHT].setBrightness (anyRunning ? 1.f : 0.f);
         lights[ALL_LIGHT + 1].setBrightness (0.f);
+
+        // Count-in. The pad ring answers a press at once (lime, held or for 0.4 s), then shows the phase: blinking magenta
+        // while waiting for the bar or armed, lime while counting, steady magenta while recording. Lamps 1 2 3 4: all four
+        // dim lime while waiting for the bar; then the beat's lamp, lime for 1 2 3 and magenta for 4 (the REC press); in the
+        // take every lamp is dim magenta and the beat's lamp bright. A refused press (no clock, under 4 pulses a bar, no
+        // empty track) blinks all four magenta for 1.2 s.
+        using loop::CountIn;
+        const bool refused = ciRefused > 0.f && blink;
+        const bool pressed = params[COUNT_PARAM].getValue() > 0.f || ciFlash > 0.f;
+        ciRefused = std::max (0.f, ciRefused - dt);
+        ciFlash = std::max (0.f, ciFlash - dt);
+        float ringLime = 0.f, ringMagenta = 0.f;
+        if (pressed) ringLime = 1.f;
+        else if (countIn.phase == CountIn::WAIT || countIn.armed) ringMagenta = blink ? 1.f : 0.f;
+        else if (countIn.phase == CountIn::COUNT) ringLime = 1.f;
+        else if (countIn.phase == CountIn::TAKE) ringMagenta = 1.f;
+        lights[COUNT_LIGHT].setBrightness (ringLime);
+        lights[COUNT_LIGHT + 1].setBrightness (ringMagenta);
+        for (int k = 0; k < 4; ++k)
+        {
+            const bool on = countIn.beat == k;
+            const bool go = countIn.phase == CountIn::TAKE || (countIn.phase == CountIn::COUNT && k == 3);
+            const float dimLime = countIn.phase == CountIn::WAIT ? 0.25f : 0.f;
+            const float dimMagenta = countIn.phase == CountIn::TAKE ? 0.2f : 0.f;
+            lights[CNT_LIGHT + 2 * k].setBrightness (on && ! go ? 1.f : dimLime);
+            lights[CNT_LIGHT + 2 * k + 1].setBrightness (on && go ? 1.f : refused ? 1.f : dimMagenta);
+        }
     }
 
     // Initialize: the engine does not run process() meanwhile, so the tracks can be emptied from this thread.
@@ -211,6 +271,8 @@ struct Looper : Module
         Module::onReset (e);
         for (loop::Track& t : tracks) t.freeAll (pool);
         sync.clear();
+        countIn.stop();
+        ciTrack = -1;
         dubAfterRec = monitor = false;
         perBar = 4;
         maxMinutes = 5;
@@ -391,6 +453,14 @@ struct LooperWidget : ModuleWidget
             addOutput (createOutputCentered<PJ301MPort> (at (outs[i]), module, Looper::TRACK_OUTPUT + i));
         }
         pad (createParamCentered<Pad> (at (L::ALL_PARAM), module, Looper::ALL_PARAM), Looper::ALL_LIGHT);
+        static const float* const clears[5] = { L::CLEAR0_PARAM, L::CLEAR1_PARAM, L::CLEAR2_PARAM, L::CLEAR3_PARAM, L::CLEAR4_PARAM };
+        for (int i = 0; i < Looper::N; ++i) addParam (createParamCentered<VCVButton> (at (clears[i]), module, Looper::CLEAR_PARAM + i));
+        addParam (createParamCentered<VCVButton> (at (L::CLEARALL_PARAM), module, Looper::CLEARALL_PARAM));
+        pad (createParamCentered<Pad> (at (L::COUNT_PARAM), module, Looper::COUNT_PARAM), Looper::COUNT_LIGHT);
+        static const float* const lamps[4] = { L::CNT0_LIGHT, L::CNT1_LIGHT, L::CNT2_LIGHT, L::CNT3_LIGHT };
+        for (int k = 0; k < 4; ++k) addChild (createLightCentered<CountLamp> (at (lamps[k]), module, Looper::CNT_LIGHT + 2 * k));
+        addParam (createParamCentered<Rogan1PSWhite> (at (L::BARS_PARAM), module, Looper::BARS_PARAM));
+        addInput (createInputCentered<PJ301MPort> (at (L::COUNT_INPUT), module, Looper::COUNT_INPUT));
         addInput (createInputCentered<PJ301MPort> (at (L::IN_L_INPUT), module, Looper::IN_L_INPUT));
         addInput (createInputCentered<PJ301MPort> (at (L::IN_R_INPUT), module, Looper::IN_R_INPUT));
         addInput (createInputCentered<PJ301MPort> (at (L::CLOCK_INPUT), module, Looper::CLOCK_INPUT));

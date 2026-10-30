@@ -1,4 +1,4 @@
-// Pad.hpp: the big square pads (momentary) and the ring light drawn around them. Art from tools/panel.py.
+// Pad.hpp: the big square pads (momentary), the ring light drawn around them and the count-in lamps. Art from tools/panel.py.
 // Author: Ari Klopfer / A_Development · MIT
 #pragma once
 #include "plugin.hpp"
@@ -36,5 +36,21 @@ struct PadRing : LimeMagentaLight
     }
     void drawBackground (const DrawArgs& a) override { ring (a, nvgRGB (0x2b, 0x2b, 0x33), mm2px (0.6f)); }
     void drawLight (const DrawArgs& a) override { if (color.a > 0.f) ring (a, color, mm2px (0.6f)); }
+    void drawHalo (const DrawArgs&) override {}
+};
+
+// A big round count-in lamp: a dark disc when off, filled with the light colour (channel 0 lime, 1 magenta) when lit.
+struct CountLamp : LimeMagentaLight
+{
+    CountLamp() { box.size = mm2px (Vec (8.f, 8.f)); }
+    void disc (const DrawArgs& a, NVGcolor c)
+    {
+        nvgBeginPath (a.vg);
+        nvgCircle (a.vg, box.size.x / 2, box.size.y / 2, box.size.x / 2 - mm2px (0.3f));
+        nvgFillColor (a.vg, c);
+        nvgFill (a.vg);
+    }
+    void drawBackground (const DrawArgs& a) override { disc (a, nvgRGB (0x2b, 0x2b, 0x33)); }
+    void drawLight (const DrawArgs& a) override { if (color.a > 0.f) disc (a, color); }
     void drawHalo (const DrawArgs&) override {}
 };

@@ -13,7 +13,7 @@ from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
 
 H = 128.5
-W = 5.08 * 26
+W = 5.08 * 30
 BAND = 8.6
 INK, INK2 = '#16161a', '#202027'
 LIME, MAGENTA, BLUE, WHITE, DIM = '#c8ff3a', '#ff3d9a', '#5ac8e6', '#f2f2f4', '#8d8d96'
@@ -24,8 +24,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Round parts: radius in mm, from the Rack component SVGs: knob Rogan1PS, button VCVButton / VCVLightLatch (6.1 mm),
 # out = output jack. Input jacks by role, ring coloured as in My lil Acid Bass: seq = clock / reset / triggers (blue),
 # play = audio in (lime), cv = modulation (magenta).
-RADIUS = {'knob': 6.7, 'button': 3.1, 'seq': 4.0, 'play': 4.0, 'cv': 4.0, 'out': 4.0}
-LABEL_SIZE = {'knob': 2.6, 'button': 2.0, 'seq': 2.4, 'play': 2.4, 'cv': 2.4, 'out': 2.6, 'pad': 2.4, 'padlow': 2.4}
+RADIUS = {'knob': 6.7, 'button': 3.1, 'seq': 4.0, 'play': 4.0, 'cv': 4.0, 'out': 4.0, 'lamp': 4.0}
+LABEL_SIZE = {'knob': 2.6, 'button': 2.0, 'seq': 2.4, 'play': 2.4, 'cv': 2.4, 'out': 2.6, 'pad': 2.4, 'padlow': 2.4, 'lamp': 3.0}
 RING_COLOR = {'seq': BLUE, 'play': LIME, 'cv': MAGENTA}
 PAD_R = 4.8                   # dark plate behind an output jack
 RING_R = RADIUS['cv'] + 0.7   # ring around an input jack
@@ -60,7 +60,7 @@ def text(s, x, y, size, fill, anchor='middle', stroke=0.0):
 
 # ---- the title band, as in My lil Toolbox: Rack's screws sit in its corners (5.08 mm squares at x 5.08 and
 # W - 10.16), so the title starts right of the left one and the face sits left of the right one
-TITLE, TITLE_X, TITLE_Y, TITLE_SIZE = 'LOOPER', 11.2, 6.3, 4.3
+TITLE, TITLE_X, TITLE_Y, TITLE_SIZE = 'MY LIL LOOPER', 11.2, 6.3, 4.3
 MASCOT_X = W - 14.46
 MASCOT_R = BAND * 0.36
 
@@ -87,7 +87,11 @@ TX = (13.0, 34.0, 55.0, 76.0, 97.0)
 GX = (113.5, 124.5)
 GPAD_X = (GX[0] + GX[1]) / 2
 SEP_X = 107.5
+X3 = 141.0                    # the count-in column, right of the global pair
+SEP2_X = 130.3
+LAMP_Y = (43.5, 56.0, 68.5, 81.0)
 ROW_NUM, ROW_REC, ROW_STOP, ROW_SMALL, ROW_LEVEL, ROW_IN, ROW_OUT = 16.4, 25.0, 42.0, 56.0, 72.0, 101.0, 115.3
+ROW_CLEAR = 86.5
 SMALL_DX = 6.5
 ZONE_X, ZONE_Y = 2.5, 92.0
 
@@ -98,6 +102,7 @@ LOOPER = [part for i, x in enumerate(TX) for part in (
     ('REV%d_PARAM' % i, 'button', x, ROW_SMALL, 'REV'),
     ('ONESHOT%d_PARAM' % i, 'button', x + SMALL_DX, ROW_SMALL, '1SHOT'),
     ('LEVEL%d_PARAM' % i, 'knob', x, ROW_LEVEL, 'LEVEL'),
+    ('CLEAR%d_PARAM' % i, 'button', x, ROW_CLEAR, 'CLEAR'),
     ('TRACK%d_INPUT' % i, 'play', x, ROW_IN, 'IN'),
     ('TRACK%d_OUTPUT' % i, 'out', x, ROW_OUT, 'OUT'),
 )] + [
@@ -107,13 +112,20 @@ LOOPER = [part for i, x in enumerate(TX) for part in (
     ('CLEAR_INPUT', 'seq', GX[0], 73.0, 'CLEAR'), ('LEVEL_INPUT', 'cv', GX[1], 73.0, 'LEVEL'),
     ('IN_L_INPUT', 'play', GX[0], ROW_IN, 'IN L'), ('IN_R_INPUT', 'play', GX[1], ROW_IN, 'IN R'),
     ('OUT_L_OUTPUT', 'out', GX[0], ROW_OUT, 'OUT L'), ('OUT_R_OUTPUT', 'out', GX[1], ROW_OUT, 'OUT R'),
+    ('CLEARALL_PARAM', 'button', GPAD_X, ROW_CLEAR, 'CLEAR ALL'),
+    ('COUNT_PARAM', 'pad', X3, ROW_REC, 'GO'),
+] + [('CNT%d_LIGHT' % i, 'lamp', X3, y, str(i + 1)) for i, y in enumerate(LAMP_Y)] + [
+    ('BARS_PARAM', 'knob', X3, 99.0, 'BARS'),
+    ('COUNT_INPUT', 'seq', X3, ROW_OUT, 'TRIG'),
 ]
 
 
 def extras():
     out = ['<rect x="%g" y="%g" width="%g" height="%g" rx="2" fill="%s"/>' % (ZONE_X, ZONE_Y, W - 2 * ZONE_X, 123.7 - ZONE_Y, INK2),
-           '<rect x="%g" y="13.5" width="0.4" height="%g" fill="%s"/>' % (SEP_X, 123.7 - 13.5, DIM)]
+           '<rect x="%g" y="13.5" width="0.4" height="%g" fill="%s"/>' % (SEP_X, 123.7 - 13.5, DIM),
+           '<rect x="%g" y="13.5" width="0.4" height="%g" fill="%s"/>' % (SEP2_X, 123.7 - 13.5, DIM)]
     out += [text(str(i + 1), x, ROW_NUM, 3.0, LIME, stroke=0.25) for i, x in enumerate(TX)]
+    out.append(text(HEADING, X3, ROW_NUM, 3.0, LIME, stroke=0.25))
     return out
 
 
@@ -137,7 +149,7 @@ def bottom(kind, y):
 
 def label_at(kind, y, row_bottom):
     """Baseline, size, colour and stroke of the label under a part. Labels in a row share the row's lowest part."""
-    colour, stroke = (LIME, 0.25) if kind == 'out' else (WHITE, 0.18)
+    colour, stroke = (LIME, 0.25) if kind in ('out', 'lamp') else (WHITE, 0.18)
     low = y + PAD_R if kind == 'out' else row_bottom[y]
     return low + 2.8, LABEL_SIZE[kind], colour, stroke
 
@@ -155,6 +167,7 @@ def label_box(x, base, size, label):
     return x - w / 2, base - 0.73 * size, x + w / 2, base
 
 
+HEADING = 'COUNT-IN'
 SCREW = 5.08
 
 
@@ -203,7 +216,8 @@ def problems(layout):
             base, size, _, _ = label_at(k, y, rb)
             labels.append((n + ' label', label_box(x, base, size, label)))
     labels += [('track %d number' % (i + 1), label_box(x, ROW_NUM, 3.0, str(i + 1))) for i, x in enumerate(TX)]
-    sep = (SEP_X, 13.5, SEP_X + 0.4, 123.7)
+    labels.append(('count heading', label_box(X3, ROW_NUM, 3.0, HEADING)))
+    seps = [(x, 13.5, x + 0.4, 123.7) for x in (SEP_X, SEP2_X)]
     for j, (a, sa) in enumerate(parts):
         e = extent(sa)
         for b, sb in parts[j + 1:]:
@@ -216,7 +230,7 @@ def problems(layout):
         for name, box in labels:
             if name != a + ' label' and shapes_hit(sa, ('box',) + box):
                 bad.append('%s covers %s' % (a, name))
-        for s in screws() + [sep]:
+        for s in screws() + seps:
             if shapes_hit(sa, ('box',) + s):
                 bad.append('%s under a screw or on the separator' % a)
     boxes = labels + band_boxes()
@@ -226,7 +240,7 @@ def problems(layout):
         for b, other in boxes[j + 1:]:
             if boxes_hit(box, other):
                 bad.append('%s overlaps %s' % (a, b))
-        for s in screws() + [sep]:
+        for s in screws() + seps:
             if boxes_hit(box, s):
                 bad.append('%s under a screw or on the separator' % a)
     return bad
@@ -239,7 +253,6 @@ def panel(layout):
         '<rect width="%g" height="%g" fill="%s"/>' % (W, H, INK),
         '<rect width="%g" height="%g" fill="%s"/>' % (W, BAND, LIME),
         text(TITLE, TITLE_X, TITLE_Y, TITLE_SIZE, INK, 'start', 0.39), mascot(MASCOT_X, BAND / 2, MASCOT_R),
-        text('my lil looper', W / 2, 12.6, 2.4, WHITE, stroke=0.12),
     ] + extras()
     rb = row_bottoms(layout)
     for _, kind, x, y, label in layout:

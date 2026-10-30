@@ -34,6 +34,28 @@ Loops are not time-stretched: change the clock tempo after recording and the loo
 
 **ALL** stops everything that plays; when nothing plays, it starts every track that has audio, together, on the next downbeat.
 
+## Clear
+
+Each track has a **CLEAR** button under its LEVEL knob; **CLEAR ALL** sits beside them. One press clears at once, with the
+same 5 ms fade as everything else. (Holding STOP for 2 seconds, or the CLEAR jack, still clear a track.)
+
+## Count-in take
+
+For recording a loop hands-free, with a count-in you can see. Needs a **CLOCK** with at least 4 pulses per bar.
+
+Press **GO** (or send a trigger to **TRIG**). It waits for the next downbeat, then lamps **1 2 3 4** light in turn with the
+beat. REC is pressed for you on **4**, so recording starts on the next bar's 1. It records **BARS** bars (1, 2, 4 or 8),
+presses REC again on 4 of the last bar, and the loop closes on the downbeat and plays. The take is always a whole number of bars.
+
+- It records on the first empty track. Clear a track first if all five hold loops.
+- The GO ring lights lime the moment you press it, then shows the phase: blinking magenta while waiting for the bar or armed,
+  lime while counting, steady magenta while recording.
+- Lamps: all four dim lime while it waits for the bar. Then lime for 1 2 3, magenta for 4 (the REC press), and dim magenta
+  with the beat's lamp bright through the take.
+- A refused press (no clock, under 4 pulses a bar, or no empty track) blinks all four lamps magenta for over a second.
+- Press GO while waiting or counting to cancel. Press it during the take to close it on the next downbeat.
+- RESET cancels a count-in. Closing, stopping or clearing the track by hand also ends it.
+
 ## Jacks on the right
 
 | Jack | |

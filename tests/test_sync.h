@@ -29,4 +29,12 @@ void testSync()
     r.tick (true, true, false);   // 2 of 4 pulses seen
     for (int i = 0; i < 3; ++i) r.tick (false, false, false);   // cable pulled
     check (r.tick (true, true, false), "sync: first clock edge after re-patching is a downbeat");
+    Sync e;
+    e.perBar = 4;
+    std::vector<int> pos;
+    for (int i = 0; i < 12; ++i) { e.tick (true, true, false); pos.push_back (e.edgePos); }
+    check (pos[0] == 0 && pos[3] == 3 && pos[4] == 0 && pos[11] == 3, "sync: edgePos is the pulse's place in the bar, 0 = downbeat", pos[4]);
+    e.tick (true, true, false);   // pulse 0
+    e.tick (true, true, true);    // RESET: this edge is the downbeat
+    check (e.edgePos == 0, "sync: edgePos is 0 after RESET");
 }

@@ -4,6 +4,7 @@
 #include "test_pool.h"
 #include "test_sync.h"
 #include "test_track.h"
+#include "test_countin.h"
 #include "test_wav.h"
 #include "FaceTap.h"
 
@@ -24,6 +25,7 @@ int main()
     testStopClearAll();
     testAdoptAndWav();
     testWavHardening();
+    testCountIn();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }

@@ -10,6 +10,7 @@ struct Sync
     int masterPos = 0;   // the next frame's place in the master loop
     int perBar = 4;      // clock pulses per bar
     int pulses = 0;      // clock pulses since the last downbeat
+    int edgePos = 0;     // the last clock edge's pulse in its bar, 0 = the downbeat (read it on a frame with an edge)
     bool clocked = false;
 
     // A track is synced when its record/play starts and loop closes wait for a downbeat.
@@ -33,6 +34,7 @@ struct Sync
         }
         if (! clocked) return beat;
         if (! clockEdge) return false;
+        edgePos = pulses;
         const bool bar = pulses == 0;
         pulses = (pulses + 1) % perBar;
         return bar;
