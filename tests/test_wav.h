@@ -1,4 +1,4 @@
-// test_wav.h: loading a loop into a track, WAV files, resampling.
+// test_wav.h: loading a loop into a track, WAV files (stereo loops, N-channel CV lanes), resampling.
 // Author: Ari Klopfer / A_Development. MIT
 #pragma once
 #include "check.h"
@@ -99,4 +99,39 @@ void testWavHardening()
     check (wav::read (p, L, R, sr) && L.size() == 3 && R[2] == 3.f, "wav: the destructor closes the file");
     std::remove (p);
     std::remove ("../build/rate.wav");
+}
+
+void testWavChannels()
+{
+    const char* p = "../build/cv.wav";
+    for (int ch : { 1, 3, 16 })
+    {
+        std::vector<float> x (7 * ch);
+        for (size_t i = 0; i < x.size(); ++i) x[i] = 0.25f * (float) i - 3.f;
+        wav::Writer w;
+        const bool wrote = w.open (p, 3000, ch);
+        w.writeFrames (x.data(), 7);
+        const bool closed = w.close();
+        std::vector<float> y;
+        int gotCh = 0, sr = 0;
+        check (wrote && closed && wav::readN (p, y, gotCh, sr) && gotCh == ch && sr == 3000 && y == x, "wav: N-channel round trip", ch);
+    }
+    std::vector<float> y;
+    int ch = 0, sr = 0;
+    check (wav::readN (p, y, ch, sr, 3) && y.size() == 3u * 16, "wav: N-channel read keeps the frame cap", (double) y.size());
+    {
+        std::FILE* f = wavHeader (p); fmtChunk (f, 17, 3000); monoData (f, 17);
+        check (! wav::readN (p, y, ch, sr), "wav: more than 16 channels is refused");
+    }
+    {
+        std::FILE* f = wavHeader (p); fmtChunk (f, 4, 3000); std::fwrite ("data", 1, 4, f); put32 (f, 0xFFFFFFF0u); put32 (f, 0); std::fclose (f);
+        check (! wav::readN (p, y, ch, sr), "wav: N-channel data longer than the file is refused");
+    }
+    {
+        std::FILE* f = wavHeader (p); fmtChunk (f, 3, 3000); monoData (f, 4);   // 16 bytes: one whole 3-channel frame
+        check (wav::readN (p, y, ch, sr) && ch == 3 && y.size() == 3, "wav: a partial last frame is dropped", (double) y.size());
+    }
+    std::vector<float> l, r;
+    check (! wav::read (p, l, r, sr), "wav: the stereo reader still refuses 3 channels");
+    std::remove (p);
 }

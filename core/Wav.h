@@ -1,4 +1,5 @@
-// Wav.h: float32 WAV files for the saved loops (write stereo, read mono or stereo) and a linear resampler.
+// Wav.h: float32 WAV files for the saved loops (write stereo, read mono or stereo), the saved CV lanes (1 to 16 channels,
+// interleaved) and a linear resampler.
 // Little-endian hosts only (x86, ARM). No Rack dependency.
 // Author: Ari Klopfer / A_Development. MIT
 #pragma once
@@ -13,24 +14,26 @@
 
 namespace wav
 {
-// Streams stereo frames into a float32 WAV; close() fills in the sizes.
+// Streams frames into a float32 WAV; close() fills in the sizes. write() takes stereo, writeFrames() interleaved frames
+// of the channel count given to open().
 struct Writer
 {
-    bool open (const std::string& path, int sampleRate)
+    bool open (const std::string& path, int sampleRate, int channels = 2)
     {
         f = std::fopen (path.c_str(), "wb");
         if (! f) return false;
         frames = 0;
-        const uint32_t sr = (uint32_t) sampleRate, byteRate = sr * 8, zero = 0;
-        const uint16_t fmt = 3, ch = 2, align = 8, bits = 32;
+        ch = channels;
+        const uint32_t sr = (uint32_t) sampleRate, byteRate = sr * 4 * ch, zero = 0;
+        const uint16_t fmt = 3, nch = (uint16_t) ch, align = (uint16_t) (4 * ch), bits = 32;
         const uint32_t fmtLen = 16;
         std::fwrite ("RIFF", 1, 4, f); std::fwrite (&zero, 4, 1, f); std::fwrite ("WAVEfmt ", 1, 8, f);
-        std::fwrite (&fmtLen, 4, 1, f); std::fwrite (&fmt, 2, 1, f); std::fwrite (&ch, 2, 1, f);
+        std::fwrite (&fmtLen, 4, 1, f); std::fwrite (&fmt, 2, 1, f); std::fwrite (&nch, 2, 1, f);
         std::fwrite (&sr, 4, 1, f); std::fwrite (&byteRate, 4, 1, f); std::fwrite (&align, 2, 1, f); std::fwrite (&bits, 2, 1, f);
         std::fwrite ("data", 1, 4, f); std::fwrite (&zero, 4, 1, f);
         return true;
     }
-    void write (const float* l, const float* r, int n)
+    void write (const float* l, const float* r, int n)   // stereo files only
     {
         float buf[2048];
         for (int i = 0; i < n;)
@@ -41,10 +44,15 @@ struct Writer
         }
         frames += n;
     }
+    void writeFrames (const float* x, int n)   // n frames of ch interleaved floats
+    {
+        std::fwrite (x, sizeof (float) * ch, n, f);
+        frames += n;
+    }
     bool close()   // false when not open (a second close is a no-op)
     {
         if (! f) return false;
-        const uint32_t data = (uint32_t) (frames * 8), riff = data + 36;
+        const uint32_t data = (uint32_t) (frames * 4 * ch), riff = data + 36;
         std::fseek (f, 4, SEEK_SET); std::fwrite (&riff, 4, 1, f);
         std::fseek (f, 40, SEEK_SET); std::fwrite (&data, 4, 1, f);
         const bool ok = std::ferror (f) == 0;
@@ -57,20 +65,18 @@ struct Writer
 private:
     std::FILE* f = nullptr;
     int64_t frames = 0;
+    int ch = 2;
 };
 
-// Reads a float32 mono or stereo WAV (it may come from a shared patch: every size is checked against the file).
-// Mono fills both channels. False for anything else. Keeps at most maxFrames frames; with toRate, at most what resamples
-// to maxFrames frames at toRate, plus one.
-inline bool read (const std::string& path, std::vector<float>& l, std::vector<float>& r, int& sampleRate,
-                  int64_t maxFrames = INT64_MAX, int toRate = 0)
+// Walks the chunks of an open file (it may come from a shared patch: every size is checked against the file) to a float32
+// "data" chunk with 1..maxCh channels and a rate in 1000..768000. True with the file at the first sample.
+inline bool findData (std::FILE* f, int maxCh, uint16_t& ch, uint32_t& sr, uint32_t& dataLen)
 {
-    std::FILE* f = std::fopen (path.c_str(), "rb");
-    if (! f) return false;
-    const std::unique_ptr<std::FILE, int (*) (std::FILE*)> closer (f, std::fclose);   // also when a resize throws
     char id[4];
-    uint32_t len = 0, sr = 0;
-    uint16_t fmt = 0, ch = 0, bits = 0;
+    uint32_t len = 0;
+    uint16_t fmt = 0, bits = 0;
+    ch = 0;
+    sr = 0;
     const long size = std::fseek (f, 0, SEEK_END) == 0 ? std::ftell (f) : -1;   // -1 past 2 GB where long is 32-bit
     bool ok = size > 0 && size < INT32_MAX && std::fseek (f, 0, SEEK_SET) == 0 && std::fread (id, 1, 4, f) == 4 && std::memcmp (id, "RIFF", 4) == 0
               && std::fread (&len, 4, 1, f) == 1 && std::fread (id, 1, 4, f) == 4 && std::memcmp (id, "WAVE", 4) == 0;
@@ -82,27 +88,59 @@ inline bool read (const std::string& path, std::vector<float>& l, std::vector<fl
         if (std::memcmp (id, "fmt ", 4) == 0)
         {
             uint8_t b[16];
-            if (len < 16 || std::fread (b, 1, 16, f) != 16) { ok = false; break; }
+            if (len < 16 || std::fread (b, 1, 16, f) != 16) return false;
             std::memcpy (&fmt, b, 2); std::memcpy (&ch, b + 2, 2); std::memcpy (&sr, b + 4, 4); std::memcpy (&bits, b + 14, 2);
         }
         else if (std::memcmp (id, "data", 4) == 0)
         {
-            if (fmt != 3 || bits != 32 || (ch != 1 && ch != 2) || sr < 1000 || sr > 768000) break;
-            const double cap = toRate > 0 ? std::ceil ((double) maxFrames * sr / toRate) + 1 : (double) maxFrames;   // double: no overflow
-            const size_t n = (size_t) std::min ((double) (len / (4u * ch)), std::max (0.0, cap));
-            l.resize (n); r.resize (n);
-            float buf[2048];
-            for (size_t i = 0; i < n && ok;)   // in pieces: no interleaved copy of the whole file
-            {
-                const size_t k = std::min (n - i, (size_t) 2048 / ch);
-                ok = std::fread (buf, sizeof (float) * ch, k, f) == k;
-                for (size_t j = 0; j < k; ++j, ++i) { l[i] = buf[j * ch]; r[i] = buf[j * ch + ch - 1]; }
-            }
-            sampleRate = (int) sr;
-            return ok;
+            dataLen = len;
+            return fmt == 3 && bits == 32 && ch >= 1 && ch <= maxCh && sr >= 1000 && sr <= 768000;
         }
     }
     return false;
+}
+
+// Reads a float32 mono or stereo WAV. Mono fills both channels. False for anything else. Keeps at most maxFrames frames;
+// with toRate, at most what resamples to maxFrames frames at toRate, plus one.
+inline bool read (const std::string& path, std::vector<float>& l, std::vector<float>& r, int& sampleRate,
+                  int64_t maxFrames = INT64_MAX, int toRate = 0)
+{
+    std::FILE* f = std::fopen (path.c_str(), "rb");
+    if (! f) return false;
+    const std::unique_ptr<std::FILE, int (*) (std::FILE*)> closer (f, std::fclose);   // also when a resize throws
+    uint16_t ch = 0;
+    uint32_t sr = 0, len = 0;
+    if (! findData (f, 2, ch, sr, len)) return false;
+    const double cap = toRate > 0 ? std::ceil ((double) maxFrames * sr / toRate) + 1 : (double) maxFrames;   // double: no overflow
+    const size_t n = (size_t) std::min ((double) (len / (4u * ch)), std::max (0.0, cap));
+    l.resize (n); r.resize (n);
+    float buf[2048];
+    bool ok = true;
+    for (size_t i = 0; i < n && ok;)   // in pieces: no interleaved copy of the whole file
+    {
+        const size_t k = std::min (n - i, (size_t) 2048 / ch);
+        ok = std::fread (buf, sizeof (float) * ch, k, f) == k;
+        for (size_t j = 0; j < k; ++j, ++i) { l[i] = buf[j * ch]; r[i] = buf[j * ch + ch - 1]; }
+    }
+    sampleRate = (int) sr;
+    return ok;
+}
+
+// Reads a float32 WAV of 1..16 channels into x, interleaved, keeping at most maxFrames frames.
+inline bool readN (const std::string& path, std::vector<float>& x, int& channels, int& sampleRate, int64_t maxFrames = INT64_MAX)
+{
+    std::FILE* f = std::fopen (path.c_str(), "rb");
+    if (! f) return false;
+    const std::unique_ptr<std::FILE, int (*) (std::FILE*)> closer (f, std::fclose);
+    uint16_t ch = 0;
+    uint32_t sr = 0, len = 0;
+    if (! findData (f, 16, ch, sr, len)) return false;
+    const size_t n = (size_t) std::min ((int64_t) (len / (4u * ch)), std::max ((int64_t) 0, maxFrames));
+    x.resize (n * ch);
+    if (n > 0 && std::fread (x.data(), sizeof (float) * ch, n, f) != n) return false;
+    channels = ch;
+    sampleRate = (int) sr;
+    return true;
 }
 
 // Linear resample of one channel to exactly n frames (n = 0 only for empty input).

@@ -26,6 +26,7 @@ int main()
     testAdoptAndWav();
     testWavHardening();
     testCountIn();
+    testWavChannels();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }
