@@ -41,6 +41,7 @@ struct Looper : Module
     uint32_t cvSeq = 0;           // the Looper CV message counter (core/CvLane.h)
     uint32_t savedTake[N] = {};   // the patch's take ids, from dataFromJson for onAdd
     bool hasSavedTakes = false;
+    uint32_t fileTake[N] = {};    // the take of each track's file on disk (last save or load; 0 = no file): dataToJson writes these
 
     // context menu (UI thread writes, process reads)
     bool dubAfterRec = false;
@@ -284,6 +285,7 @@ struct Looper : Module
     {
         Module::onReset (e);
         for (loop::Track& t : tracks) t.freeAll (pool);
+        for (uint32_t& f : fileTake) f = 0;   // no track has a file now
         sync.clear();
         countIn.stop();
         ciTrack = -1;
@@ -308,9 +310,11 @@ struct Looper : Module
             if (v == savedVersion[i]) continue;
             const std::string path = trackPath (dir, i);
             const int len = t.len, nb = t.nBlocks;
+            const uint32_t take = t.take;   // the take of the content written below
             if (t.state == loop::Track::RECORDING || t.state == loop::Track::EMPTY || len == 0)
             {
                 system::remove (path);
+                fileTake[i] = 0;
                 if (t.state != loop::Track::RECORDING) savedVersion[i] = v;
                 continue;
             }
@@ -324,7 +328,7 @@ struct Looper : Module
                 whole = b < nb && list[b];
                 if (whole) w.write (list[b]->l, list[b]->r, std::min (loop::BLOCK, len - b * loop::BLOCK));
             }
-            if (w.close() && whole && system::rename (tmp, path)) savedVersion[i] = v;
+            if (w.close() && whole && system::rename (tmp, path)) { savedVersion[i] = v; fileTake[i] = take; }
             else
             {
                 system::remove (tmp);
@@ -381,6 +385,7 @@ struct Looper : Module
                 }
                 tracks[i].adopt (list.data(), (int) list.size(), n, pool);
                 if (takes) tracks[i].take = savedTake[i];   // the Looper CV lanes saved with this take play again
+                fileTake[i] = tracks[i].take;
                 // Resampled or snapped: the file no longer matches loopRate and the master, so the next save rewrites it.
                 savedVersion[i] = tracks[i].version - (fileRate != rate || (int64_t) want != len ? 1u : 0u);
             }
@@ -401,8 +406,10 @@ struct Looper : Module
         json_object_set_new (root, "maxMinutes", json_integer (maxMinutes));
         json_object_set_new (root, "masterLen", json_integer (sync.masterLen));
         json_object_set_new (root, "sampleRate", json_integer (std::lround (loopRate)));
+        // The takes of the files on disk, not the live ones: Rack's delete-undo and Duplicate rebuild a module from this JSON
+        // and those files, so an unsaved new recording must not pair its take with the old audio.
         json_t* takes = json_array();
-        for (const loop::Track& t : tracks) json_array_append_new (takes, json_integer (t.take));
+        for (uint32_t take : fileTake) json_array_append_new (takes, json_integer (take));
         json_object_set_new (root, "takes", takes);
         return root;
     }

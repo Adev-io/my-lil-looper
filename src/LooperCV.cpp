@@ -29,7 +29,9 @@ struct LooperCV : Module
     FaceTap face;   // the mascot's mouth: the lane outputs
     unsigned savedVersion[N] = {};
     dsp::ClockDivider lightDiv;
-    struct Saved { bool has = false; uint32_t take = 0; int decim = 1, trackLen = 0; } saved[N];   // dataFromJson -> onAdd
+    struct Saved { bool has = false; uint32_t take = 0; int decim = 1, trackLen = 0; };
+    Saved saved[N];      // dataFromJson -> onAdd
+    Saved fileMeta[N];   // what each cvN.wav on disk holds (last save or load; has = false: no file): dataToJson writes these
 
     std::atomic<bool> working { true };
     std::thread worker;
@@ -98,6 +100,7 @@ struct LooperCV : Module
     {
         Module::onReset (e);
         for (loop::CvLane& l : lanes) l.clear (pool);
+        for (Saved& f : fileMeta) f = Saved();   // no lane has a file now
     }
 
     std::string lanePath (const std::string& dir, int i) { return system::join (dir, string::f ("cv%d.wav", i + 1)); }
@@ -115,9 +118,12 @@ struct LooperCV : Module
             if (v == savedVersion[i]) continue;
             const std::string path = lanePath (dir, i);
             const int nch = l.nch, stored = l.stored, nb = l.nBlocks, decim = l.D;
+            const uint32_t take = l.take;   // the take and lane geometry of the content written below
+            const int trackLen = l.trackLen;
             if (mode[i] == loop::CvMsg::REC || nch == 0 || stored == 0)   // a take still recording is not saved, as its track
             {
                 system::remove (path);
+                fileMeta[i] = Saved();
                 if (mode[i] != loop::CvMsg::REC) savedVersion[i] = v;
                 continue;
             }
@@ -127,7 +133,7 @@ struct LooperCV : Module
             const std::string tmp = path + ".tmp";
             wav::Writer w;
             const int rate = std::max (1000, (int) std::lround (APP->engine->getSampleRate() / decim));   // nominal: load uses D from the patch
-            if (! whole || ! w.open (tmp, rate, nch)) { system::remove (path); WARN ("LooperCV: cannot write %s", tmp.c_str()); continue; }   // a stale file would load under the new take id
+            if (! whole || ! w.open (tmp, rate, nch)) { system::remove (path); fileMeta[i] = Saved(); WARN ("LooperCV: cannot write %s", tmp.c_str()); continue; }   // a stale file would load under the new take id
             std::vector<float> buf;
             buf.reserve (1024 * nch);
             for (int s = 0; s < stored; s += 1024)
@@ -137,11 +143,17 @@ struct LooperCV : Module
                 for (int64_t f = (int64_t) s * nch; f < (int64_t) (s + k) * nch; ++f) buf.push_back (loop::CvLane::floatAt (list.data(), f));
                 w.writeFrames (buf.data(), k);
             }
-            if (w.close() && system::rename (tmp, path)) savedVersion[i] = v;
+            if (w.close() && system::rename (tmp, path))
+            {
+                savedVersion[i] = v;
+                Saved& f = fileMeta[i];
+                f.has = true; f.take = take; f.decim = decim; f.trackLen = trackLen;
+            }
             else
             {
                 system::remove (tmp);
                 system::remove (path);   // a stale file would load under the new take id
+                fileMeta[i] = Saved();
                 WARN ("LooperCV: lane %d not saved", i + 1);
             }
         }
@@ -181,6 +193,7 @@ struct LooperCV : Module
                 }
                 lanes[i].adopt (list.data(), (int) list.size(), samples, ch, s.decim, s.trackLen, s.take, pool);
                 savedVersion[i] = lanes[i].version;
+                fileMeta[i] = lanes[i].nch > 0 && lanes[i].stored > 0 ? s : Saved();   // the file holds the take it was saved with
             }
             catch (const std::exception& e)   // one escaping onAdd takes Rack down
             {
@@ -190,17 +203,19 @@ struct LooperCV : Module
         }
     }
 
+    // The lanes of the files on disk, not the live lanes: Rack's delete-undo and Duplicate rebuild a module from this JSON
+    // and those files, so an unsaved new take must not pair its take id with the old CV.
     json_t* dataToJson() override
     {
         json_t* root = json_object();
         json_t* arr = json_array();
-        for (const loop::CvLane& l : lanes)
+        for (const Saved& f : fileMeta)
         {
-            if (l.nch == 0 || l.stored == 0) { json_array_append_new (arr, json_null()); continue; }
+            if (! f.has) { json_array_append_new (arr, json_null()); continue; }
             json_t* o = json_object();
-            json_object_set_new (o, "take", json_integer (l.take));
-            json_object_set_new (o, "decim", json_integer (l.D));
-            json_object_set_new (o, "trackLen", json_integer (l.trackLen));
+            json_object_set_new (o, "take", json_integer (f.take));
+            json_object_set_new (o, "decim", json_integer (f.decim));
+            json_object_set_new (o, "trackLen", json_integer (f.trackLen));
             json_array_append_new (arr, o);
         }
         json_object_set_new (root, "lanes", arr);
