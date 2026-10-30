@@ -6,6 +6,7 @@
 #include "test_track.h"
 #include "test_countin.h"
 #include "test_wav.h"
+#include "test_cvlane.h"
 #include "FaceTap.h"
 
 int main()
@@ -27,6 +28,13 @@ int main()
     testWavHardening();
     testCountIn();
     testWavChannels();
+    testTrackTakeAndHead();
+    testCvRoundTrip();
+    testCvPassThroughAndNewTake();
+    testCvUnpatchedAndInvalid();
+    testCvDecimAndHold();
+    testCvStarve();
+    testCvAdopt();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }

@@ -31,6 +31,8 @@ struct Track
     bool reverse = false, oneShot = false, dubAfterRec = false;   // panel / menu settings
     bool justClosed = false;  // true for the one frame a loop closed (the module may make it the master)
     unsigned version = 0;     // bumps whenever the audio changes; save writes changed tracks only
+    uint32_t take = 0;        // goes up when a recording starts: the Looper CV expander knows a new take by it
+    int head = -1;            // the frame process() wrote (recording) or read (playing) this frame; -1 for neither
 
     int len = 0;              // frames in the loop
     int pos = 0;              // next frame to play
@@ -92,9 +94,10 @@ struct Track
     void process (float inL, float inR, bool downbeat, bool synced, BlockPool& pool, float& outL, float& outR)
     {
         justClosed = false;
+        head = -1;
         outL = outR = 0.f;
         const bool now = downbeat || ! synced;
-        if (pending == START_REC && now) { pending = NONE; state = RECORDING; len = 0; pos = 0; closing = stopAfterClose = false; }
+        if (pending == START_REC && now) { pending = NONE; state = RECORDING; len = 0; pos = 0; closing = stopAfterClose = false; take++; }
         if (pending == START_PLAY && now) { pending = NONE; state = PLAYING; jump(); }   // still fading out from a stop: no jump at gain
         if (state == RECORDING && closing && now) close (pool);
         if (jumping && outGain <= 0.f) land();
@@ -105,7 +108,7 @@ struct Track
             else
             {
                 write (len, inL, inR);
-                len++;
+                head = len++;
                 return;
             }
         }
@@ -119,6 +122,7 @@ struct Track
             Block* b = blocks[pos / BLOCK];
             const int i = pos % BLOCK;
             const float l = b->l[i], r = b->r[i];
+            head = pos;
             outL = l * outGain;
             outR = r * outGain;
             if (dubGain > 0.f)
