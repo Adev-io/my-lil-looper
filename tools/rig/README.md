@@ -12,4 +12,6 @@ click.ps1 moves the real cursor for ~0.4 s: don't run it while someone is using 
 a full-window cap.ps1 shot, not a crop. Never trigger a native dialog: it blocks the window and the scripts cannot close it.
 `patches/smoke.vcv`: Fundamental VCO sine into Looper IN L, Looper OUT L into Fundamental Scope. A copy is saved over
 by the save/reload check, so launch from a copy in %TEMP% when testing saves.
+`patches/smoke_cv.vcv`: the same plus My lil Looper CV, a Fundamental LFO (triangle) into lane 1, lane 1 OUT into Scope
+IN 1 and the LFO into Scope IN 2.
 Close any other running Rack first: while another Rack.exe is up, the rig's Rack exits within seconds of launch.

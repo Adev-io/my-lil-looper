@@ -1,0 +1,8 @@
+{"version":"2.6.6","modules":[{"id":1,"plugin":"Fundamental","model":"VCO","version":"2.6.4","params":[],"pos":[0,0]},
+{"id":2,"plugin":"MyLilLooper","model":"Looper","version":"2.2.0","params":[],"pos":[9,0]},
+{"id":3,"plugin":"MyLilLooper","model":"LooperCV","version":"2.2.0","params":[],"pos":[39,0]},
+{"id":4,"plugin":"Fundamental","model":"Scope","version":"2.6.4","params":[],"pos":[47,0]},
+{"id":5,"plugin":"Fundamental","model":"LFO","version":"2.6.4","params":[],"pos":[47,1]}],"cables":[{"id":1,"outputModuleId":1,"outputId":0,"inputModuleId":2,"inputId":5,"color":"#f3374b"},
+{"id":2,"outputModuleId":5,"outputId":1,"inputModuleId":3,"inputId":0,"color":"#ff3d9a"},
+{"id":3,"outputModuleId":3,"outputId":0,"inputModuleId":4,"inputId":0,"color":"#c8ff3a"},
+{"id":4,"outputModuleId":5,"outputId":1,"inputModuleId":4,"inputId":1,"color":"#5ac8e6"}]}

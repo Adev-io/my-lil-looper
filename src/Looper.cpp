@@ -6,6 +6,7 @@
 #include "Pad.hpp"
 #include "BlockPool.h"
 #include "CountIn.h"
+#include "CvLane.h"
 #include "Sync.h"
 #include "Track.h"
 #include "Wav.h"
@@ -37,6 +38,9 @@ struct Looper : Module
     float ciFlash = 0.f;     // seconds left of the "GO pressed" lime flash
     FaceTap face;   // the mascot's mouth: the main out
     unsigned savedVersion[N] = {};
+    uint32_t cvSeq = 0;           // the Looper CV message counter (core/CvLane.h)
+    uint32_t savedTake[N] = {};   // the patch's take ids, from dataFromJson for onAdd
+    bool hasSavedTakes = false;
 
     // context menu (UI thread writes, process reads)
     bool dubAfterRec = false;
@@ -94,6 +98,7 @@ struct Looper : Module
         configBypass (IN_L_INPUT, OUT_L_OUTPUT);
         configBypass (IN_R_INPUT, OUT_R_OUTPUT);
         lightDiv.setDivision (64);
+        for (loop::Track& t : tracks) t.take = random::u32();   // a Looper CV moved from another Looper cannot match a take
         pool.refill();
         worker = std::thread ([this] {
             while (working.load())
@@ -210,6 +215,15 @@ struct Looper : Module
         outputs[OUT_R_OUTPUT].setVoltage (sumR);
         face.push (clamp ((sumL + sumR) / 10.f, -1.f, 1.f), args.sampleRate);
 
+        // A Looper CV expander on the right gets every track's play head; the engine flips its buffer after this frame.
+        if (rightExpander.module && rightExpander.module->model == modelLooperCV)
+        {
+            loop::CvLink* link = (loop::CvLink*) rightExpander.module->leftExpander.producerMessage;
+            link->seq = ++cvSeq;
+            for (int i = 0; i < N; ++i) link->lane[i] = loop::cvMsg (tracks[i]);
+            rightExpander.module->leftExpander.requestMessageFlip();
+        }
+
         if (lightDiv.process()) updateLights (args.sampleTime * lightDiv.getDivision(), anyRunning);
     }
 
@@ -325,6 +339,8 @@ struct Looper : Module
     {
         const std::string dir = getPatchStorageDirectory();
         const int rate = (int) std::lround (APP->engine->getSampleRate());
+        const bool takes = hasSavedTakes;
+        hasSavedTakes = false;
         const int64_t cap = (int64_t) loop::MAX_BLOCKS * loop::BLOCK;
         loopRate = (float) rate;
         const double oldMaster = savedMaster, oldRate = savedRate;
@@ -364,6 +380,7 @@ struct Looper : Module
                     }
                 }
                 tracks[i].adopt (list.data(), (int) list.size(), n, pool);
+                if (takes) tracks[i].take = savedTake[i];   // the Looper CV lanes saved with this take play again
                 // Resampled or snapped: the file no longer matches loopRate and the master, so the next save rewrites it.
                 savedVersion[i] = tracks[i].version - (fileRate != rate || (int64_t) want != len ? 1u : 0u);
             }
@@ -384,6 +401,9 @@ struct Looper : Module
         json_object_set_new (root, "maxMinutes", json_integer (maxMinutes));
         json_object_set_new (root, "masterLen", json_integer (sync.masterLen));
         json_object_set_new (root, "sampleRate", json_integer (std::lround (loopRate)));
+        json_t* takes = json_array();
+        for (const loop::Track& t : tracks) json_array_append_new (takes, json_integer (t.take));
+        json_object_set_new (root, "takes", takes);
         return root;
     }
 
@@ -402,6 +422,9 @@ struct Looper : Module
             savedMaster = (double) json_integer_value (m);
             savedRate = (double) json_integer_value (s);
         }
+        json_t* takes = json_object_get (root, "takes");
+        hasSavedTakes = empty && json_array_size (takes) == N;
+        for (int i = 0; i < N && hasSavedTakes; ++i) savedTake[i] = (uint32_t) json_integer_value (json_array_get (takes, i));
     }
 };
 
