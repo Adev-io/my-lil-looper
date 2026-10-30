@@ -90,12 +90,13 @@ records its poly **CV IN** (1 to 16 channels); while track n plays, lane n plays
 the audio (reverse, one-shot, RESET and the count-in included). Sing a line into My lil Mouth, merge its NOTE, GATE and VEL
 into lane 1 and record track 1: the loop keeps your voice, the lane keeps the notes for any synth.
 
-- CV is recorded on the first take only. Overdub, undo and redo change the audio, never the CV.
+- Every new recording (after a clear, or on an empty track) records CV. Overdub, undo and redo change the audio, never the CV.
 - Stopped or empty track: CV OUT is 0 V on every channel, so gates close. While recording, CV OUT passes CV IN through.
 - The channel count is CV IN's when the take starts. CV IN unpatched then: the lane stays empty.
 - CV jumps at the loop point (no fades; a fade would bend the pitch). Stored at about 3 kHz and held: pulses shorter than
   about 0.3 ms can be missed.
-- Lane light: magenta while recording, lime while playing. The face dims when no Looper sits on the left.
+- Lane light: magenta while recording a patched CV IN (a take with CV IN unpatched stores nothing and stays dark), lime
+  while playing a stored take. The face dims when no Looper sits on the left.
 - Lanes are saved with the patch (one WAV per lane) and come back with their track's loop. A lane moved to another Looper
   does not play there.
 
