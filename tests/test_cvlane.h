@@ -249,3 +249,41 @@ void testCvBlockStraddle()
     }
     check (bad == 0, "cv: every sample across the block edge plays back as recorded", bad);
 }
+
+// Records a 50-frame take of constant 1 V CV, then lets it play for a while.
+static void recordConstantCv (CvRig& k)
+{
+    k.t().pressRec (*k.r.pool);
+    for (int i = 0; i < 50; ++i) k.frame1 (1.f, 1);
+    k.t().pressRec (*k.r.pool);
+    for (int i = 0; i < 10; ++i) k.frame1 (0.f, 1);
+}
+
+// Counts the next 30 frames whose message is not PLAY or whose lane output is not 1 V.
+static int jumpGlitches (CvRig& k)
+{
+    int bad = 0;
+    for (int i = 0; i < 30; ++i)
+    {
+        k.frame1 (0.f, 1);
+        if (k.msg.mode != CvMsg::PLAY || k.outCh != 1 || k.out[0] != 1.f) ++bad;
+    }
+    return bad;
+}
+
+void testCvJumpKeepsPlay()
+{
+    CvRig k;   // RESET: the track fades out, jumps, and reads nothing on the frame its gain reaches 0
+    recordConstantCv (k);
+    k.t().rewind();
+    const int reset = jumpGlitches (k);
+    check (reset == 0, "cv: RESET keeps the lane playing 1 V (no idle or 0 V frame)", reset);
+
+    CvRig s;   // 1SHOT: REC while playing retriggers the take at the next downbeat (the take sets the master), same jump
+    recordConstantCv (s);
+    s.t().oneShot = true;
+    s.t().pressRec (*s.r.pool);
+    for (int i = 0; i < 60 && s.t().pending != Track::NONE; ++i) s.frame1 (0.f, 1);   // to the downbeat: the jump starts
+    const int shot = jumpGlitches (s);
+    check (shot == 0, "cv: a 1SHOT retrigger keeps the lane playing 1 V (no idle or 0 V frame)", shot);
+}

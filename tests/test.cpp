@@ -37,6 +37,7 @@ int main()
     testCvAdopt();
     testCvLoadThenRecord();
     testCvBlockStraddle();
+    testCvJumpKeepsPlay();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }

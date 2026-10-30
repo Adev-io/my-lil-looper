@@ -31,12 +31,16 @@ struct CvLink
 };
 
 // The message for one track, after its process() this frame. A track fading out after STOP still reads: that is IDLE.
+// A jump (RESET, 1SHOT, play start) fades out first, and the frame its gain reaches 0 reads nothing (head -1) while the
+// track still plays: that frame is PLAY too, or a held gate blips off.
 inline CvMsg cvMsg (const Track& t)
 {
     CvMsg m;
     const bool play = t.state == Track::PLAYING || t.state == Track::OVERDUBBING;
-    m.mode = t.head < 0 ? CvMsg::IDLE : t.state == Track::RECORDING ? CvMsg::REC : play ? CvMsg::PLAY : CvMsg::IDLE;
-    m.pos = std::max (0, t.head);
+    if (t.state == Track::RECORDING && t.head >= 0) m.mode = CvMsg::REC;
+    else if (play && t.len > 0) m.mode = CvMsg::PLAY;
+    else m.mode = CvMsg::IDLE;
+    m.pos = t.head >= 0 ? t.head : std::min (std::max (0, t.pos), std::max (0, t.len - 1));
     m.len = t.len;
     m.take = t.take;
     return m;
