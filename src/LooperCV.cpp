@@ -127,7 +127,7 @@ struct LooperCV : Module
             const std::string tmp = path + ".tmp";
             wav::Writer w;
             const int rate = std::max (1000, (int) std::lround (APP->engine->getSampleRate() / decim));   // nominal: load uses D from the patch
-            if (! whole || ! w.open (tmp, rate, nch)) { WARN ("LooperCV: cannot write %s", tmp.c_str()); continue; }
+            if (! whole || ! w.open (tmp, rate, nch)) { system::remove (path); WARN ("LooperCV: cannot write %s", tmp.c_str()); continue; }   // a stale file would load under the new take id
             std::vector<float> buf;
             buf.reserve (1024 * nch);
             for (int s = 0; s < stored; s += 1024)
@@ -141,6 +141,7 @@ struct LooperCV : Module
             else
             {
                 system::remove (tmp);
+                system::remove (path);   // a stale file would load under the new take id
                 WARN ("LooperCV: lane %d not saved", i + 1);
             }
         }
