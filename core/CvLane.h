@@ -68,7 +68,7 @@ struct CvLane
         if (pendingLoad)   // the first fresh message after a load: keep the lane only if its take came back
         {
             pendingLoad = false;
-            if (m.take != take || m.mode == CvMsg::REC || m.len == 0) { clear (pool); take = m.take; }
+            if (m.take != take || m.mode == CvMsg::REC || m.len == 0) clear (pool);
         }
         if (m.take != take)   // a recording started
         {

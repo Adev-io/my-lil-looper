@@ -35,6 +35,8 @@ int main()
     testCvDecimAndHold();
     testCvStarve();
     testCvAdopt();
+    testCvLoadThenRecord();
+    testCvBlockStraddle();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }

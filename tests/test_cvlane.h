@@ -210,3 +210,42 @@ void testCvAdopt()
     check (k.lane->nch == 1, "cv: an adopted lane waits for a fresh message before it decides");
     k.lane->clear (p);
 }
+
+void testCvLoadThenRecord()
+{
+    CvRig k;
+    k.frame1 (0.f);
+    BlockPool& p = *k.lanePool;
+    Block* b[1] = { p.make() };
+    k.lane->adopt (b, 1, 20, 1, 1, 20, k.t().take + 5, p);   // a take id that will not match
+    k.t().pressRec (*k.r.pool);   // a new recording on the very first frame after the load
+    for (int i = 0; i < 30; ++i) { const float in[2] = { cvv (i), -cvv (i) }; k.frame (in, 2); }
+    check (k.lane->nch == 2 && k.lane->stored == 30, "cv: a recording that starts on the first frame after a load is kept", k.lane->nch);
+    k.t().pressRec (*k.r.pool);
+    bool same = true;
+    for (int i = 0; i < 40; ++i)
+    {
+        k.frame1 (0.f, 2);
+        same = same && k.outCh == 2 && k.msg.mode == CvMsg::PLAY && k.out[0] == cvv (k.msg.pos) && k.out[1] == -cvv (k.msg.pos);
+    }
+    check (same, "cv: that recording plays back at the play head");
+}
+
+void testCvBlockStraddle()
+{
+    CvRig k;
+    const int N = 50000;   // 3 channels x 50000 samples = 150000 floats: past the first 131072-float block
+    k.t().pressRec (*k.r.pool);
+    for (int i = 0; i < N; ++i) { const float v = cvv (i % 100); const float in[3] = { v, -v, 0.5f * v }; k.frame (in, 3); }
+    k.t().pressRec (*k.r.pool);
+    check (k.lane->nch == 3 && k.lane->nBlocks == 2 && k.lane->stored == N, "cv: 3 channels x 50000 frames span two pool blocks", k.lane->stored);
+    int bad = 0;
+    for (int i = 0; i < N; ++i)
+    {
+        k.frame1 (0.f, 3);
+        const int pos = k.msg.pos;
+        const float v = cvv (pos % 100);
+        if (k.outCh != 3 || k.out[0] != v || k.out[1] != -v || k.out[2] != 0.5f * v) ++bad;
+    }
+    check (bad == 0, "cv: every sample across the block edge plays back as recorded", bad);
+}
