@@ -83,10 +83,27 @@ by the rate ratio.
 Undo of delete, and Rack's crash recovery, bring back the loops as of the last patch save.
 Duplicate (Ctrl+D) copies the loops; copy and paste of a selection copies the settings only.
 
+## My lil Looper CV (expander)
+
+Place **My lil Looper CV** directly to the right of the Looper. Lane n follows track n: while track n records, lane n
+records its poly **CV IN** (1 to 16 channels); while track n plays, lane n plays the take back from **CV OUT**, in step with
+the audio (reverse, one-shot, RESET and the count-in included). Sing a line into My lil Mouth, merge its NOTE, GATE and VEL
+into lane 1 and record track 1: the loop keeps your voice, the lane keeps the notes for any synth.
+
+- CV is recorded on the first take only. Overdub, undo and redo change the audio, never the CV.
+- Stopped or empty track: CV OUT is 0 V on every channel, so gates close. While recording, CV OUT passes CV IN through.
+- The channel count is CV IN's when the take starts. CV IN unpatched then: the lane stays empty.
+- CV jumps at the loop point (no fades; a fade would bend the pitch). Stored at about 3 kHz and held: pulses shorter than
+  about 0.3 ms can be missed.
+- Lane light: magenta while recording, lime while playing. The face dims when no Looper sits on the left.
+- Lanes are saved with the patch (one WAV per lane) and come back with their track's loop. A lane moved to another Looper
+  does not play there.
+
 ## Building
 
 Rack SDK 2.6.6 and MSYS2 (Windows) or a Unix shell: `make` builds, `make test` runs the core checks, `make dist` packs
 the plugin. On Windows from PowerShell: `pwsh -File tools/mk.ps1 test`. Panel art: `py -3.11 tools/panel.py`
-(needs fontTools) writes `res/` and `src/layout.hpp`.
+(needs fontTools) writes `res/` and `src/layout.hpp`; `py -3.11 tools/panel_cv.py` writes the expander's `res/LooperCV.svg`
+and `src/layout_cv.hpp`.
 
 MIT licence. Author: Ari Klopfer / A_Development.
