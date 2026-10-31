@@ -7,6 +7,10 @@ $repo = Split-Path (Split-Path $PSScriptRoot)
 $dist = Join-Path $repo 'dist\MyLilLooper'
 if (-not (Test-Path "$dist\plugin.dll")) { throw "No build at $dist. Run make dist first." }
 $patchPath = (Resolve-Path $Patch).Path
+# Rack is single-instance: a second one only shows a small "already running" box, and clicks aimed at the rig would
+# then move the cursor over the other Rack. Refuse instead.
+$other = @(Get-Process Rack -ErrorAction SilentlyContinue)
+if ($other) { throw ("Rack is already running (" + (($other | ForEach-Object { "pid $($_.Id) '$($_.MainWindowTitle)'" }) -join ', ') + "). Close it first.") }
 foreach ($x in $Extra) { if (-not (Test-Path "$env:LOCALAPPDATA\Rack2\plugins-win-x64\$x")) { throw "No plugin $x in the user's Rack" } }
 $u = Join-Path $env:TEMP ("looper-rig-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory "$u\plugins-win-x64" | Out-Null
@@ -21,6 +25,15 @@ for ($i = 0; $i -lt 60; $i++) {
 if ($p.HasExited) { throw "Rack exited (code $($p.ExitCode)). See $u\log.txt" }
 $h = (Get-Process -Id $p.Id -ErrorAction SilentlyContinue).MainWindowHandle   # an IntPtr: compare with 0, -not is always false
 if ($null -eq $h -or $h -eq 0) { throw "No Rack window after 30 s (pid $($p.Id)); dir $u kept" }
+$title = ''
+for ($i = 0; $i -lt 30 -and $title -notlike 'VCV Rack*'; $i++) {   # the title follows the window by a moment
+    Start-Sleep -Milliseconds 500
+    $title = (Get-Process -Id $p.Id -ErrorAction SilentlyContinue).MainWindowTitle
+}
+if ($title -notlike 'VCV Rack*') {   # a message box, not the rack: close this instance
+    Stop-Process -Id $p.Id -Force
+    throw "Rack (pid $($p.Id)) opened '$title', not its window; dir $u kept"
+}
 Start-Sleep 3
 "pid=$($p.Id)"
 "dir=$u"

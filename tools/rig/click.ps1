@@ -7,8 +7,14 @@ public class RigClick { [DllImport("user32.dll")] public static extern bool SetP
 [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l); [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y); [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
 public struct RECT { public int L, T, R, B; } public struct POINT { public int X, Y; } }
 "@
+# Only a rig Rack (started by launch.ps1 with a *-rig-* user dir) showing its own window: never the user's Rack, never
+# a message box, whose small window would put the cursor over whatever lies behind it.
+$proc = Get-Process -Id $ProcId
+$cmd = (Get-CimInstance Win32_Process -Filter "ProcessId=$ProcId").CommandLine
+if ($proc.ProcessName -ne 'Rack' -or $cmd -notmatch '-rig-\d{8}-\d{6}') { throw "pid $ProcId is not a rig Rack" }
+if ($proc.MainWindowTitle -notlike 'VCV Rack*') { throw "pid $ProcId shows '$($proc.MainWindowTitle)', not the rack" }
 [RigClick]::SetProcessDPIAware() | Out-Null
-$hwnd = (Get-Process -Id $ProcId).MainWindowHandle
+$hwnd = $proc.MainWindowHandle
 $r = New-Object RigClick+RECT; [RigClick]::GetWindowRect($hwnd, [ref]$r) | Out-Null
 $o = New-Object RigClick+POINT; [RigClick]::ClientToScreen($hwnd, [ref]$o) | Out-Null
 $cx = $ImgX - ($o.X - $r.L); $cy = $ImgY - ($o.Y - $r.T)
