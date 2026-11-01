@@ -59,7 +59,13 @@ struct FxTiming
 
     // Level glide: true while a scene's levels are still on their way; value() is track i's level this frame.
     bool gliding() const { return glideN < glideLen; }
-    float value (int i) const { return from[i] + (to[i] - from[i]) * (float) (glideN + 1) / (float) glideLen; }
+    // The last frame (and no glide at all) is exactly the scene's level: rounding would leave 1.70000029 for 1.7 at -O0,
+    // and a zero glideLen would divide by zero.
+    float value (int i) const
+    {
+        if (glideN + 1 >= glideLen) return to[i];
+        return from[i] + (to[i] - from[i]) * (float) (glideN + 1) / (float) glideLen;
+    }
 
     // No FX panel: everything back to neutral at once.
     void neutral()

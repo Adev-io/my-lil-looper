@@ -52,13 +52,39 @@ void testSceneTiming()
     }
     check (linear && frames == 100 && last == 0.f, "scene: levels glide to the scene's over exactly one bar", frames);
 
+    // the last glide frame is the scene's level exactly, and value() is finite when no glide ever ran
+    FxTiming e;
+    Scene up;
+    up.saved = true;
+    up.t[4].level = 1.7f;
+    const float low[5] = { 1, 1, 1, 1, 0.3f };
+    e.step (mute, speed, 9, up, 0, true, true, 7, low);
+    float lastV = 0.f;
+    while (e.gliding()) { lastV = e.value (4); e.step (mute, speed, 9, up, 0, false, true, 7, low); }
+    check (lastV == 1.7f, "scene: the last glide frame is exactly the scene's level", lastV);
+    FxTiming idle;
+    check (std::isfinite (idle.value (0)), "scene: value() with no glide ever run is finite", idle.value (0));
+
     t.step (mute, speed, 7, s, 0, true, true, 100, level);
     check (t.mute[0] && t.speed[1] == 0, "scene: the panel's old switches are not applied before it takes the scene over");
-    mute[0] = true;
-    speed[1] = 0;
-    mute[2] = false;
+    mute[0] = false;
+    speed[1] = 2;
+    mute[3] = true;
+    t.step (mute, speed, 7, s, 7, false, true, 100, level);
+    check (t.mute[0] && t.speed[1] == 0 && ! t.mute[3], "scene: the panel's switches wait for the next downbeat after the take-over");
     t.step (mute, speed, 7, s, 7, true, true, 100, level);
-    check (t.mute[0] && ! t.mute[2], "scene: once taken over, the panel's switches rule again");
+    check (! t.mute[0] && t.speed[1] == 2 && t.mute[3], "scene: once taken over, the panel's switches rule again");
+
+    // two recalls within one bar: only the latest is applied, and its values are the ones in effect
+    FxTiming q;
+    Scene a, b;
+    a.saved = b.saved = true;
+    a.t[0].mute = true;
+    b.t[2].speed = 2;
+    q.step (mute, speed, 5, a, 0, false, true, 100, level);
+    q.step (mute, speed, 6, b, 0, false, true, 100, level);
+    q.step (mute, speed, 6, b, 0, true, true, 100, level);
+    check (q.applied == 6 && ! q.mute[0] && q.speed[2] == 2, "scene: two recalls in one bar apply only the latest", q.applied);
 
     t.neutral();
     bool clear = true;
