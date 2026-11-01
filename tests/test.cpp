@@ -10,6 +10,7 @@
 #include "test_fxhead.h"
 #include "test_trackfx.h"
 #include "test_djfilter.h"
+#include "test_scene.h"
 #include "FaceTap.h"
 
 int main()
@@ -48,6 +49,7 @@ int main()
     testFxHeadCrossfade();
     testTrackFx();
     testDjFilter();
+    testSceneTiming();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }
