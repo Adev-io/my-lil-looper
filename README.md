@@ -125,11 +125,28 @@ Merge module and patch the merge into STUT (channel n = track n). FILTER takes p
 - One-shot at x0.5 plays the first half of the loop, at x2 plays it twice.
 - Scenes are saved with the patch. Without the FX module (or when it is removed) every track plays plain.
 
+## My lil Looper Song (expander)
+
+Place **My lil Looper Song** directly to the LEFT of My lil Looper FX (the chain is Song | FX | Looper | CV). It records an
+arrangement from your scene performance and plays it back on its own. A bar here is one Looper downbeat, so the Looper
+needs a recorded loop or a CLOCK.
+
+- **REC**: press, and recording starts on the next bar (the pad blinks, then glows magenta). Play scenes on the FX as you
+  would live (pads or SCENE CV); the Song notes which scene landed on which bar. Press REC again: it stops on the next bar.
+  A new recording replaces the old song.
+- **PLAY**: starts the song on the next bar, from bar 1. Each scene comes back on its exact bar. Press again to stop (the
+  scenes stay where they are). The FX pads still work while it plays; the song takes over again at its next change.
+- **LOOP** (lit = on): start over at the end; off: stop and keep the last scene.
+- The readout shows `bar / bars` while playing, `REC n` while recording.
+- **PLAY** and **REC** jacks take triggers. **END** fires a trigger when the song ends or loops; **BAR** fires one on every
+  bar (handy to clock other modules to the Looper).
+- The song is saved with the patch and comes back stopped. Up to 999 bars and 256 scene changes.
+
 ## Building
 
 Rack SDK 2.6.6 and MSYS2 (Windows) or a Unix shell: `make` builds, `make test` runs the core checks, `make dist` packs
 the plugin. On Windows from PowerShell: `pwsh -File tools/mk.ps1 test`. Panel art: `py -3.11 tools/panel.py`
-(needs fontTools) writes `res/` and `src/layout.hpp`; `py -3.11 tools/panel_cv.py` and `tools/panel_fx.py` write the
-expanders' panels and `src/layout_cv.hpp` / `src/layout_fx.hpp`.
+(needs fontTools) writes `res/` and `src/layout.hpp`; `py -3.11 tools/panel_cv.py`, `tools/panel_fx.py` and
+`tools/panel_song.py` write the expanders' panels and their `src/layout_*.hpp`.
 
 MIT licence. Author: Ari Klopfer / A_Development.
