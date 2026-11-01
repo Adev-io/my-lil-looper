@@ -47,6 +47,11 @@ int main()
     testFxHeadStutter();
     testFxHeadTape();
     testFxHeadCrossfade();
+    testFxHeadReverseStutter();
+    testFxHeadTapeStart();
+    testFxHeadWrap();
+    testFxHeadThreshold();
+    testFxHeadSliceT();
     testTrackFx();
     testDjFilter();
     testSceneTiming();

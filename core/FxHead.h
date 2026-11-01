@@ -40,7 +40,8 @@ struct FxHead
     Out step (int pos, int len, bool rev)
     {
         const double d = rev ? -1.0 : 1.0;
-        const bool timelineJump = ! first && pos != wrapI (lastPos + (rev ? -1 : 1), len);   // RESET, retrigger, play start
+        // The track stepped pos after the last frame with that frame's direction: predict with lastRev, not rev.
+        const bool timelineJump = ! first && pos != wrapI (lastPos + (lastRev ? -1 : 1), len);   // RESET, retrigger, play start
 
         // The read head without stutter or tape stop.
         if (speed == 1.0) anchored = false;
@@ -52,19 +53,22 @@ struct FxHead
         }
         base = anchored ? wrapD (start + d * speed * (double) e++, len) : pos;
 
-        // Stutter: the slice that began on the grid point at or before the press, repeated while held.
+        // Stutter: the slice that began on the grid point at or before the press, repeated while held. A reverse change
+        // is a new slice around the head: the slice runs the other way, so it is captured again.
+        const int slice = std::max (1, sliceT);   // a zero or negative slice must not divide by zero
         const bool stutNow = stut && ! tapeOn;
-        if (stutNow && ! stutOn)
+        if (stutNow && (! stutOn || rev != lastRev))
         {
-            const int back = sinceBeat % sliceT;
+            const int back = sinceBeat % slice;
             sliceStart = wrapD (base - d * speed * back, len);
             k = back;
         }
         stutOn = stutNow;
-        double read = stutOn ? wrapD (sliceStart + d * speed * (double) (k++ % sliceT), len) : base;
+        double read = stutOn ? wrapD (sliceStart + d * speed * (double) (k++ % slice), len) : base;
 
         // Tape stop: from wherever the head is, slow to 0 in 0.4 s; on release spin up in 0.2 s and land in time.
-        if (tape && ! tapeOn) { tapeOn = true; tapeRead = first ? read : wrapD (lastRead + lastVel, len); rate = 1.0; stutOn = false; }
+        // The advance below moves tapeRead one step, so it starts at the last read, not at this frame's position.
+        if (tape && ! tapeOn) { tapeOn = true; tapeRead = first ? read : lastRead; rate = 1.0; stutOn = false; }
         if (tapeOn)
         {
             rate = tape ? std::fmax (0.0, rate - 1.0 / (0.4 * sampleRate)) : std::fmin (1.0, rate + 1.0 / (0.2 * sampleRate));
@@ -78,7 +82,8 @@ struct FxHead
         {
             const double expected = wrapD (lastRead + lastVel, len);
             const int fade = std::max (1, (int) std::lround (0.001 * sampleRate));
-            if (dist (read, expected, len) > 4.0) { xOld = expected; xVel = lastVel; xn = fade; xN = fade; }
+            // Half a frame: a 1-frame step back (sliceT 2) is a jump; steady speeds and the tape ramp are not
+            if (dist (read, expected, len) > 0.5) { xOld = expected; xVel = lastVel; xn = fade; xN = fade; }
             else if (xn > 0) xOld = wrapD (xOld + xVel, len);
         }
         else xn = 0;
@@ -111,7 +116,8 @@ private:
     static double wrapD (double p, int len)
     {
         p = std::fmod (p, (double) len);
-        return p < 0 ? p + len : p;
+        if (p < 0) p += len;
+        return p >= len ? 0.0 : p;   // a hair below 0 rounds up to len; Track would index past the loop
     }
     static double unwrap (double step, int len)   // a step across the loop seam, as the short way round
     {
