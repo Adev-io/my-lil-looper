@@ -86,6 +86,16 @@ void testSceneTiming()
     q.step (mute, speed, 6, b, 0, true, true, 100, level);
     check (q.applied == 6 && ! q.mute[0] && q.speed[2] == 2, "scene: two recalls in one bar apply only the latest", q.applied);
 
+    // a re-save of the scene still waiting for the downbeat: the request id moves on, so the downbeat plays the new mix
+    FxTiming r;
+    Scene c, d;
+    c.saved = d.saved = true;
+    c.t[0].mute = true;
+    d.t[3].mute = true;
+    r.step (mute, speed, 8, c, 0, false, true, 100, level);
+    r.step (mute, speed, 9, d, 0, true, true, 100, level);
+    check (r.applied == 9 && ! r.mute[0] && r.mute[3], "scene: a re-save of a waiting scene in the same bar plays the new content", r.applied);
+
     t.neutral();
     bool clear = true;
     for (int i = 0; i < 5; ++i) clear = clear && ! t.mute[i] && t.speed[i] == 1;

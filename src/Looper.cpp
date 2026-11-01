@@ -262,7 +262,8 @@ struct Looper : Module
             for (int i = 0; i < N; ++i)
             {
                 link->lane[i] = loop::cvMsg (tracks[i]);
-                if (fxTiming.mute[i]) link->lane[i].mode = loop::CvMsg::IDLE;   // a muted track's lane is silent too
+                // a muted track's lane is silent too, but a lane that is recording keeps its take (CvLane stops at a gap)
+                if (fxTiming.mute[i] && link->lane[i].mode != loop::CvMsg::REC) link->lane[i].mode = loop::CvMsg::IDLE;
             }
             rightExpander.module->leftExpander.requestMessageFlip();
         }

@@ -117,8 +117,8 @@ flashes magenta). Press a saved scene to recall it on the next bar: mutes and sp
 glide over that bar (you see the knobs turn). The pad blinks while it waits, then stays lit. **SCENE** CV (0-10 V) picks
 scenes 1-8.
 
-**Jacks:** STUT and TAPE take poly gates (channel n = track n; patch My lil Mouth's TRIG out to beatbox stutters), FILTER
-takes poly CV (5 V = half the knob).
+**Jacks:** STUT and TAPE take poly gates (channel n = track n). To beatbox stutters, merge My lil Mouth's TRIG 1-4 with a
+Merge module and patch the merge into STUT (channel n = track n). FILTER takes poly CV (5 V = half the knob).
 
 - A bar is a clock bar with CLOCK patched, else the master loop; with nothing synced, changes happen at once.
 - Looper CV lanes follow the FX: their CV speeds up, stutters and tape-stops with the track; a muted track's lane is 0 V.

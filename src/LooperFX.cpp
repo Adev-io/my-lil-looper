@@ -75,8 +75,10 @@ struct LooperFX : Module
         requested = k;
     }
 
-    void save (int k)
+    // False (nothing saved) while no Looper is linked: the levels would be the last ones it reported, not the mix.
+    bool save (int k)
     {
+        if (! linked.load (std::memory_order_relaxed)) return false;
         loop::Scene& s = scenes[k];
         s.saved = true;
         for (int i = 0; i < N; ++i)
@@ -86,7 +88,9 @@ struct LooperFX : Module
             s.t[i].filter = params[FILTER_PARAM + i].getValue();
             s.t[i].level = level[i];
         }
-        if (requested == k && reqId != ackId) reqScene = s;   // still waiting for the downbeat: it plays the new mix
+        // still waiting for the downbeat: a new request id, or the Looper keeps the old mix
+        if (requested == k && reqId != ackId) { reqScene = s; ++reqId; }
+        return true;
     }
 
     void process (const ProcessArgs& args) override
@@ -105,7 +109,7 @@ struct LooperFX : Module
             {
                 partner = rightExpander.moduleId;
                 reqId = ackId = back.applied;
-                requested = current = -1;
+                requested = -1;   // current stays: it is display only, and the patch's scene is still the one in effect
                 gN = gLen = 0;
             }
             barLen = std::max (1, back.barLen);
@@ -137,7 +141,7 @@ struct LooperFX : Module
             if (params[SCENE_PARAM + k].getValue() > 0.f)
             {
                 held[k] += args.sampleTime;
-                if (held[k] >= 2.f && ! savedNow[k]) { save (k); savedNow[k] = true; flash[k] = 0.6f; }
+                if (held[k] >= 2.f && ! savedNow[k]) { savedNow[k] = true; if (save (k)) flash[k] = 0.6f; }
             }
             else
             {
