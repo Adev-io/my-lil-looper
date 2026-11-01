@@ -1,4 +1,4 @@
-// Pad.hpp: the big square pads (momentary), the ring light drawn around them and the count-in lamps. Art from tools/panel.py.
+// Pad.hpp: the big square pads and the Looper FX scene pads (momentary), the ring light drawn around them and the count-in lamps. Art from tools/panel.py.
 // Author: Ari Klopfer / A_Development · MIT
 #pragma once
 #include "plugin.hpp"
@@ -20,6 +20,17 @@ struct PadLow : app::SvgSwitch
         momentary = true;
         addFrame (Svg::load (asset::plugin (pluginInstance, "res/PadLow_0.svg")));
         addFrame (Svg::load (asset::plugin (pluginInstance, "res/PadLow_1.svg")));
+    }
+};
+
+// The Looper FX scene pads (momentary, smaller).
+struct ScenePad : app::SvgSwitch
+{
+    ScenePad()
+    {
+        momentary = true;
+        addFrame (Svg::load (asset::plugin (pluginInstance, "res/ScenePad_0.svg")));
+        addFrame (Svg::load (asset::plugin (pluginInstance, "res/ScenePad_1.svg")));
     }
 };
 
