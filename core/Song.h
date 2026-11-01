@@ -85,6 +85,7 @@ struct SongEngine
                     mode = STOPPED;
                     break;
                 case PLAY_ARMED:
+                    if (playPress) break;   // armed this frame: its bar-0 request stands, the next downbeat starts bar 0
                     mode = PLAYING;
                     bar = 0;
                     o.request = ahead (loop);

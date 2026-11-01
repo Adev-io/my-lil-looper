@@ -119,6 +119,12 @@ void testSongPlay()
     l.tick (-1, true);
     check (l.e.mode == SongEngine::REC_ARMED, "song: REC while playing stops it and arms recording");
 
+    SongRig d;
+    record4 (d);
+    d.toBar();
+    d.tick (-1, false, true);   // PLAY on the downbeat frame itself
+    check (d.e.mode == SongEngine::PLAY_ARMED && d.out.request == 1, "song: PLAY on a downbeat still asks for the bar-0 scene, starts on the next", d.out.request);
+
     SongRig empty;
     empty.tick (-1, false, true);
     check (empty.e.mode == SongEngine::STOPPED && empty.out.request == -1, "song: PLAY with no song does nothing");
