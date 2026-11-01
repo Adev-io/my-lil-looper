@@ -11,6 +11,7 @@
 #include "test_trackfx.h"
 #include "test_djfilter.h"
 #include "test_scene.h"
+#include "test_song.h"
 #include "FaceTap.h"
 
 int main()
@@ -55,6 +56,9 @@ int main()
     testTrackFx();
     testDjFilter();
     testSceneTiming();
+    testSongRecord();
+    testSongCaps();
+    testSongPlay();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }
