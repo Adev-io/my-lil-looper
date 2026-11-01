@@ -7,6 +7,7 @@
 #include "test_countin.h"
 #include "test_wav.h"
 #include "test_cvlane.h"
+#include "test_fxhead.h"
 #include "FaceTap.h"
 
 int main()
@@ -38,6 +39,11 @@ int main()
     testCvLoadThenRecord();
     testCvBlockStraddle();
     testCvJumpKeepsPlay();
+    testFxHeadNeutral();
+    testFxHeadSpeed();
+    testFxHeadStutter();
+    testFxHeadTape();
+    testFxHeadCrossfade();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }
