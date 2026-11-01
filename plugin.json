@@ -1,7 +1,7 @@
 {
   "slug": "MyLilLooper",
   "name": "My lil Looper",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "license": "MIT",
   "brand": "A_Development",
   "author": "Ari Klopfer",
@@ -15,6 +15,7 @@
   "modules": [
     { "slug": "Looper", "name": "My lil Looper", "description": "Five-track stereo live looper: record, overdub with undo, reverse and one-shot per track, synced to the first loop or a clock", "tags": ["Recording", "Sampler", "Polyphonic"] },
     { "slug": "LooperCV", "name": "My lil Looper CV", "description": "Expander for My lil Looper: five poly CV lanes that record and play with the tracks, so a sung or played line loops as CV too", "tags": ["Recording", "Polyphonic", "Expander"] },
-    { "slug": "LooperFX", "name": "My lil Looper FX", "description": "Expander for My lil Looper: per-track DJ filter, half/double speed, mute, stutter and tape stop, and 8 scenes recalled on the bar", "tags": ["Effect", "Filter", "Expander"] }
+    { "slug": "LooperFX", "name": "My lil Looper FX", "description": "Expander for My lil Looper: per-track DJ filter, half/double speed, mute, stutter and tape stop, and 8 scenes recalled on the bar", "tags": ["Effect", "Filter", "Expander"] },
+    { "slug": "LooperSong", "name": "My lil Looper Song", "description": "Expander for My lil Looper FX: record which scene came on which bar, then play the arrangement back bar-exact, once or looped", "tags": ["Sequencer", "Expander"] }
   ]
 }

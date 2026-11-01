@@ -21,6 +21,9 @@ struct LooperFX : Module
     enum LightId { ENUMS (MUTE_LIGHT, N), ENUMS (SCENE_LIGHT, 2 * SCENES), LIGHTS_LEN };
 
     FxBack backMsg[2];                    // the right expander's double buffer: the Looper writes one, we read the other
+    SongLink songMsg[2];                  // the left expander's double buffer: a My lil Looper Song writes one
+    uint32_t lastSongSeq = 0, songBackSeq = 0, lastSongReq = 0;
+    int64_t songPartner = -1;             // the Song we last synced request counters with (-1 none)
     uint32_t lastBackSeq = 0, linkSeq = 0;
     std::atomic<bool> linked { false };
     FaceTap face;   // the mascot's mouth: the Looper's main out
@@ -62,6 +65,8 @@ struct LooperFX : Module
         configInput (FILTER_INPUT, "Filter CV (poly: channel n = track n, 5 V = half the knob)");
         rightExpander.producerMessage = &backMsg[0];
         rightExpander.consumerMessage = &backMsg[1];
+        leftExpander.producerMessage = &songMsg[0];
+        leftExpander.consumerMessage = &songMsg[1];
         lightDiv.setDivision (64);
     }
 
@@ -101,6 +106,7 @@ struct LooperFX : Module
         lastBackSeq = back.seq;
         linked.store (fresh, std::memory_order_relaxed);
         if (! looper) partner = -1;
+        int took = -1;   // the scene taken over this frame, for a Song on the left
         if (fresh)
         {
             // A Looper new to us (or back after an unlink): its applied counter is its own, so start from it. Else a
@@ -128,6 +134,7 @@ struct LooperFX : Module
                 gLen = barLen;
                 ackId = reqId;
                 current = requested;
+                took = requested;
             }
         }
         if (gN < gLen)   // filters glide to the scene over the same bar as the Looper's levels
@@ -157,6 +164,34 @@ struct LooperFX : Module
             lastCvScene = k;
         }
         else lastCvScene = -1;
+
+        // My lil Looper Song on the left: its requests are pad presses. A Song new to us starts from its request counter,
+        // so a request it made earlier is not replayed.
+        const SongLink& song = *(const SongLink*) leftExpander.consumerMessage;
+        const bool songThere = leftExpander.module && leftExpander.module->model == modelLooperSong;
+        const bool songFresh = songThere && song.seq != lastSongSeq;
+        lastSongSeq = song.seq;
+        if (! songThere) songPartner = -1;
+        if (songFresh)
+        {
+            if (leftExpander.moduleId != songPartner) { songPartner = leftExpander.moduleId; lastSongReq = song.reqSeq; }
+            else if (song.reqSeq != lastSongReq)
+            {
+                lastSongReq = song.reqSeq;
+                if (song.reqScene >= 0 && song.reqScene < SCENES) recall (song.reqScene);
+            }
+        }
+        if (songThere && leftExpander.module->rightExpander.producerMessage)
+        {
+            SongBack* sb = (SongBack*) leftExpander.module->rightExpander.producerMessage;
+            sb->seq = ++songBackSeq;
+            sb->looper = fresh;
+            sb->downbeat = fresh && back.downbeat;
+            sb->barLen = barLen;
+            sb->applied = took;
+            sb->current = current;
+            leftExpander.module->rightExpander.requestMessageFlip();
+        }
 
         if (looper && rightExpander.module->leftExpander.producerMessage)
         {

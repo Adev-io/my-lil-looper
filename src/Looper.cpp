@@ -276,6 +276,7 @@ struct Looper : Module
             back->barLen = barLen;
             for (int i = 0; i < N; ++i) back->level[i] = params[LEVEL_PARAM + i].getValue();
             back->applied = fxTiming.applied;
+            back->downbeat = beat;
             back->mainOut = clamp ((sumL + sumR) / 10.f, -1.f, 1.f);
             leftExpander.module->rightExpander.requestMessageFlip();
         }

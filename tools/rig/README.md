@@ -15,5 +15,7 @@ by the save/reload check, so launch from a copy in %TEMP% when testing saves.
 `patches/smoke_cv.vcv`: the same plus My lil Looper CV, a Fundamental LFO (triangle) into lane 1, lane 1 OUT into Scope
 IN 1 and the LFO into Scope IN 2.
 `patches/smoke_fx.vcv`: My lil Looper FX left of the Looper, a VCO saw into IN L, OUT L into Scope IN 1.
+`patches/smoke_song.vcv`: Song | FX | Looper, a VCO saw into IN L, OUT L into Scope IN 1. The rig has no Audio module, so
+Rack's engine runs slower than wall-clock time: give holds and bar waits about 2x.
 Close any other running Rack first: Rack is single-instance, so launch.ps1 refuses while another Rack.exe is up, and
 click.ps1 only clicks a rig Rack (its -rig- user dir) showing its own window, never the user's Rack or a message box.
