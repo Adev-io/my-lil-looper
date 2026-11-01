@@ -9,6 +9,7 @@
 #include "test_cvlane.h"
 #include "test_fxhead.h"
 #include "test_trackfx.h"
+#include "test_djfilter.h"
 #include "FaceTap.h"
 
 int main()
@@ -46,6 +47,7 @@ int main()
     testFxHeadTape();
     testFxHeadCrossfade();
     testTrackFx();
+    testDjFilter();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }
