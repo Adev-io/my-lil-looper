@@ -4,6 +4,7 @@
 // Author: Ari Klopfer / A_Development. MIT
 #pragma once
 #include "BlockPool.h"
+#include "FxHead.h"
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -33,6 +34,7 @@ struct Track
     unsigned version = 0;     // bumps whenever the audio changes; save writes changed tracks only
     uint32_t take = 0;        // goes up when a recording starts: the Looper CV expander knows a new take by it
     int head = -1;            // the frame process() wrote (recording) or read (playing) this frame; -1 for neither
+    FxHead fx;                // the Looper FX read head (neutral unless the module sets its speed / stutter / tape stop)
 
     int len = 0;              // frames in the loop
     int pos = 0;              // next frame to play
@@ -44,6 +46,7 @@ struct Track
     {
         fadeLen = std::max (1, (int) (0.005f * sr));
         fadeStep = 1.f / fadeLen;
+        fx.sampleRate = sr;
         maxLen = (int) std::min ((double) maxSeconds * sr, (double) MAX_BLOCKS * BLOCK);
     }
 
@@ -104,6 +107,7 @@ struct Track
 
         if (state == RECORDING)
         {
+            fx.reset();
             if (len >= maxLen || ! ensureBlock (len / BLOCK, pool)) close (pool);   // full or starved: close here
             else
             {
@@ -119,13 +123,21 @@ struct Track
         // The frame an undo fade reaches 0 still counts: a playing track stays in phase (a stopped one must not move)
         if (len > 0 && (outGain > 0.f || (swapPending && (state == PLAYING || state == OVERDUBBING))))
         {
-            Block* b = blocks[pos / BLOCK];
-            const int i = pos % BLOCK;
-            const float l = b->l[i], r = b->r[i];
-            head = pos;
+            const FxHead::Out f = fx.step (pos, len, reverse);
+            float l, r;
+            sampleAt (f.read, l, r);
+            if (f.w > 0.f)   // the FX head jumped: fade the old trajectory out over 1 ms
+            {
+                float ol, orr;
+                sampleAt (f.old, ol, orr);
+                l += f.w * (ol - l);
+                r += f.w * (orr - r);
+            }
+            head = (int) f.read;
             outL = l * outGain;
             outR = r * outGain;
-            if (dubGain > 0.f)
+            const bool inPlace = fx.onTimeline() && f.w == 0.f;   // overdub only on the timeline (then read == pos)
+            if (dubGain > 0.f && inPlace)
             {
                 if (copyOnWrite (pos / BLOCK, pool)) write (pos, l + dubGain * clean (inL), r + dubGain * clean (inR));   // a NaN in must not wipe the loop
                 else   // starved: the pass ends; a track the user stopped stays stopped
@@ -139,6 +151,7 @@ struct Track
             else if (++pos == len) { pos = 0; wrapped = true; }
             if (wrapped && oneShot && state == PLAYING && ! jumping) state = STOPPED;   // slews out: an overdub may have covered the seam
         }
+        else fx.reset();
         if (jumping) jumped++;
         if (swapPending && outGain <= 0.f) swapUndo();
         if (clearing && outGain <= 0.f) freeAll (pool);
@@ -199,6 +212,20 @@ private:
         b->l[p % BLOCK] = clean (l);
         b->r[p % BLOCK] = clean (r);
         version++;   // unsigned: wraps safely; the module only tests it for equality
+    }
+    void sampleAt (double p, float& l, float& r) const   // linear interpolation; a whole frame reads exactly
+    {
+        const int i0 = std::min ((int) p, len - 1), i1 = i0 + 1 >= len ? 0 : i0 + 1;
+        const float f = (float) (p - i0);
+        const Block* a = blocks[i0 / BLOCK];
+        l = a->l[i0 % BLOCK];
+        r = a->r[i0 % BLOCK];
+        if (f > 0.f)
+        {
+            const Block* b = blocks[i1 / BLOCK];
+            l += f * (b->l[i1 % BLOCK] - l);
+            r += f * (b->r[i1 % BLOCK] - r);
+        }
     }
     float& at (int p, bool right) { Block* b = blocks[p / BLOCK]; return right ? b->r[p % BLOCK] : b->l[p % BLOCK]; }
 

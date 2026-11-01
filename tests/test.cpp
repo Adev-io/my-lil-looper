@@ -8,6 +8,7 @@
 #include "test_wav.h"
 #include "test_cvlane.h"
 #include "test_fxhead.h"
+#include "test_trackfx.h"
 #include "FaceTap.h"
 
 int main()
@@ -44,6 +45,7 @@ int main()
     testFxHeadStutter();
     testFxHeadTape();
     testFxHeadCrossfade();
+    testTrackFx();
     std::printf ("%s: %d failure(s)\n", failures ? "FAILED" : "passed", failures);
     return failures ? 1 : 0;
 }
