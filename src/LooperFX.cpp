@@ -30,6 +30,7 @@ struct LooperFX : Module
     int requested = -1;                   // the scene asked for, waiting for the downbeat
     loop::Scene reqScene;
     uint32_t reqId = 0, ackId = 0;        // newest request; the one taken over into the switches
+    int64_t partner = -1;                 // the Looper we last reconciled with (-1 none): see process()
     int barLen = 1;
     float level[N] = { 1.f, 1.f, 1.f, 1.f, 1.f };   // the Looper's LEVEL knobs, as last reported
     float mainOut = 0.f;
@@ -68,7 +69,7 @@ struct LooperFX : Module
 
     void recall (int k)
     {
-        if (! scenes[k].saved) return;
+        if (! scenes[k].saved || ! linked.load (std::memory_order_relaxed)) return;   // no Looper to play it: nothing queues
         reqScene = scenes[k];
         ++reqId;
         requested = k;
@@ -85,16 +86,28 @@ struct LooperFX : Module
             s.t[i].filter = params[FILTER_PARAM + i].getValue();
             s.t[i].level = level[i];
         }
+        if (requested == k && reqId != ackId) reqScene = s;   // still waiting for the downbeat: it plays the new mix
     }
 
     void process (const ProcessArgs& args) override
     {
         const FxBack& back = *(const FxBack*) rightExpander.consumerMessage;
-        const bool fresh = rightExpander.module && rightExpander.module->model == modelLooper && back.seq != lastBackSeq;
+        const bool looper = rightExpander.module && rightExpander.module->model == modelLooper;
+        const bool fresh = looper && back.seq != lastBackSeq;
         lastBackSeq = back.seq;
         linked.store (fresh, std::memory_order_relaxed);
+        if (! looper) partner = -1;
         if (fresh)
         {
+            // A Looper new to us (or back after an unlink): its applied counter is its own, so start from it. Else a
+            // stale scene would replay on its next downbeat, and switches taken over earlier would stay dead.
+            if (rightExpander.moduleId != partner)
+            {
+                partner = rightExpander.moduleId;
+                reqId = ackId = back.applied;
+                requested = current = -1;
+                gN = gLen = 0;
+            }
             barLen = std::max (1, back.barLen);
             for (int i = 0; i < N; ++i) level[i] = back.level[i];
             mainOut = back.mainOut;
@@ -141,7 +154,7 @@ struct LooperFX : Module
         }
         else lastCvScene = -1;
 
-        if (rightExpander.module && rightExpander.module->model == modelLooper)
+        if (looper && rightExpander.module->leftExpander.producerMessage)
         {
             FxLink* m = (FxLink*) rightExpander.module->leftExpander.producerMessage;
             m->seq = ++linkSeq;
@@ -174,7 +187,7 @@ struct LooperFX : Module
         for (int k = 0; k < SCENES; ++k)
         {
             float lime = 0.f;
-            if (k == requested && reqId != ackId) lime = blink ? 1.f : 0.f;   // waiting for the downbeat
+            if (linked.load (std::memory_order_relaxed) && k == requested && reqId != ackId) lime = blink ? 1.f : 0.f;   // waiting for the downbeat
             else if (k == current) lime = 1.f;
             else if (scenes[k].saved) lime = 0.15f;
             flash[k] = std::max (0.f, flash[k] - dt);
@@ -229,14 +242,18 @@ struct LooperFX : Module
             for (int i = 0; i < N; ++i)
             {
                 json_t* o = json_array_get (tracks, i);
-                if (json_t* j = json_object_get (o, "mute")) s.t[i].mute = json_boolean_value (j);
-                if (json_t* j = json_object_get (o, "speed")) s.t[i].speed = clamp ((int) json_integer_value (j), 0, 2);
-                if (json_t* j = json_object_get (o, "filter")) s.t[i].filter = clamp ((float) json_number_value (j), -1.f, 1.f);
-                if (json_t* j = json_object_get (o, "level")) s.t[i].level = clamp ((float) json_number_value (j), 0.f, 2.f);
+                json_t* m = json_object_get (o, "mute");   // a field of the wrong type keeps its default
+                json_t* sp = json_object_get (o, "speed");
+                json_t* f = json_object_get (o, "filter");
+                json_t* lv = json_object_get (o, "level");
+                if (json_is_boolean (m)) s.t[i].mute = json_boolean_value (m);
+                if (json_is_integer (sp)) s.t[i].speed = clamp ((int) json_integer_value (sp), 0, 2);
+                if (json_is_number (f)) s.t[i].filter = clamp ((float) json_number_value (f), -1.f, 1.f);
+                if (json_is_number (lv)) s.t[i].level = clamp ((float) json_number_value (lv), 0.f, 2.f);
             }
         }
         json_t* c = json_object_get (root, "current");
-        current = c ? clamp ((int) json_integer_value (c), -1, SCENES - 1) : -1;
+        current = json_is_integer (c) ? clamp ((int) json_integer_value (c), -1, SCENES - 1) : -1;
         if (current >= 0 && ! scenes[current].saved) current = -1;
         requested = -1;
     }
