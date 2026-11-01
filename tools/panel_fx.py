@@ -20,19 +20,19 @@ SY = (24.0, 37.0, 50.0, 63.0)         # scene pad rows
 HEAD = 'SCENES'
 ROW_NUM, ROW_FILTER, ROW_SPEED, ROW_MUTE, ROW_STUT, ROW_TAPE, ROW_JACK = 16.4, 28.0, 47.0, 61.0, 72.5, 84.0, 106.0
 
-P.RADIUS['switch'] = 4.0              # CKSSThree, vertical: 7.6 mm tall
+P.RADIUS['switch'] = 4.8              # CKSSThree, vertical: 4.56 x 9.6 mm (Rack's component SVG, 75 px/in)
 P.LABEL_SIZE['switch'] = 2.0
 P.PADS['scene'] = (10.0, 8.0)
 P.LABEL_SIZE['scene'] = 2.4
 
 LAYOUT = [part for i, x in enumerate(TX) for part in (
     ('FILTER%d_PARAM' % i, 'knob', x, ROW_FILTER, 'FILTER'),
-    ('SPEED%d_PARAM' % i, 'switch', x, ROW_SPEED, 'x.5 x1 x2'),
+    ('SPEED%d_PARAM' % i, 'switch', x, ROW_SPEED, 'SPEED'),
     ('MUTE%d_PARAM' % i, 'button', x, ROW_MUTE, 'MUTE'),
     ('STUT%d_PARAM' % i, 'button', x, ROW_STUT, 'STUT'),
     ('TAPE%d_PARAM' % i, 'button', x, ROW_TAPE, 'TAPE'),
 )] + [('SCENE%d_PARAM' % (r * 2 + c), 'scene', SX[c], y, str(r * 2 + c + 1)) for r, y in enumerate(SY) for c in range(2)] + [
-    ('STUTLEN_PARAM', 'knob', (SX[0] + SX[1]) / 2, 82.0, 'STUT LEN'),
+    ('STUTLEN_PARAM', 'knob', (SX[0] + SX[1]) / 2, 81.0, 'STUT LEN'),
     ('SCENE_INPUT', 'cv', 12.0, ROW_JACK, 'SCENE'),
     ('STUT_INPUT', 'seq', 30.0, ROW_JACK, 'STUT'),
     ('TAPE_INPUT', 'seq', 48.0, ROW_JACK, 'TAPE'),

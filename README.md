@@ -107,7 +107,7 @@ Place **My lil Looper FX** directly to the LEFT of the Looper (Looper CV stays o
 | Control | What it does |
 |---|---|
 | **FILTER** | DJ filter: left = low-pass (down to 80 Hz), right = high-pass (up to 8 kHz), centre = off. |
-| **x.5 x1 x2** | Speed, tape style (pitch moves with it). Changes on the next bar. Overdub works at x1 only. |
+| **SPEED**: up x2, middle x1, down x0.5 | Speed, tape style (pitch moves with it). Changes on the next bar. Overdub works at x1 only. |
 | **MUTE** | Lit = playing. Mutes on the next bar; the track keeps its place, so it comes back in time. |
 | **STUT** (hold) | Repeats the slice that started on the last grid point (STUT LEN: 1/4 to 1/32 of a bar). Let go and the track is where it would have been. |
 | **TAPE** (hold) | Slows the track to a stop in 0.4 s. Let go: it spins back up and lands in time. |
