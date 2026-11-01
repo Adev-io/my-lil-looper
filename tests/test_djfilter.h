@@ -4,8 +4,17 @@
 #include "check.h"
 #include "DjFilter.h"
 #include <random>
+#include <vector>
 
 using namespace loop;
+
+// Largest sample-to-sample change of a[from..to).
+static double maxStep (const std::vector<float>& a, int from, int to)
+{
+    double m = 0;
+    for (int i = std::max (from, 1); i < to; ++i) m = std::max (m, (double) std::fabs (a[i] - a[i - 1]));
+    return m;
+}
 
 // Gain in dB of a sine through the filter at `knob`, after 1 s to settle.
 static double djGain (float knob, double hz, float sr)
@@ -63,4 +72,50 @@ void testDjFilter()
         }
     }
     check (stable, "djfilter: finite and bounded over the whole knob with full-scale noise at 44.1, 48 and 192 kHz");
+
+    // A steady input, the knob at -1 for 1 s, flicked to +1, then to 0. After a flick the largest step may only be what
+    // the input moves (1.5x), what the settled output moves, or the slope of a 5 ms fade over the input's amplitude.
+    for (int src = 0; src < 2; ++src)
+    {
+        const int sr = 48000, win = sr / 5;
+        const float amp = src == 0 ? 12.f : 1.f;   // DC 12 V, or a 100 Hz sine
+        DjFilter f;
+        f.setSampleRate ((float) sr);
+        std::vector<float> in (3 * sr), out (3 * sr);
+        for (int i = 0; i < 3 * sr; ++i)
+        {
+            const float s = src == 0 ? amp : amp * (float) std::sin (2 * 3.14159265358979 * 100.0 * i / sr);
+            const float knob = i < sr ? -1.f : i < 2 * sr ? 1.f : 0.f;
+            float l = s, r = s;
+            f.process (knob, l, r);
+            in[i] = s;
+            out[i] = l;
+        }
+        double worst = 0;
+        bool clean = true;
+        for (int j : { sr, 2 * sr })
+        {
+            const double step = maxStep (out, j, j + win);
+            const double allowed = 1.5 * maxStep (in, j, j + win) + maxStep (out, j + win - sr / 20, j + win) + amp / (0.005 * sr);
+            worst = std::max (worst, step);
+            clean = clean && step <= allowed;
+        }
+        bool exact = true;
+        for (int i = 2 * sr + sr / 2; i < 3 * sr; ++i) exact = exact && out[i] == in[i];
+        check (clean, src == 0 ? "djfilter: DC flicked -1 -> +1 -> 0 makes no click" : "djfilter: a sine flicked -1 -> +1 -> 0 makes no click", worst);
+        check (exact, src == 0 ? "djfilter: DC at 0 after the flicks comes back bit for bit" : "djfilter: a sine at 0 after the flicks comes back bit for bit");
+    }
+
+    // DC through the flip: low-pass passes it, high-pass blocks it. Each end settles within 0.5 s.
+    {
+        DjFilter f;
+        f.setSampleRate (48000);
+        float l = 0.f, r = 0.f;
+        for (int i = 0; i < 48000; ++i) { l = r = 12.f; f.process (-1.f, l, r); }
+        for (int i = 0; i < 24000; ++i) { l = r = 12.f; f.process (1.f, l, r); }
+        const float blocked = l;
+        check (std::fabs (blocked) < 0.01f, "djfilter: DC at -1 then +1 settles to 0 within 0.5 s", blocked);
+        for (int i = 0; i < 24000; ++i) { l = r = 12.f; f.process (-1.f, l, r); }
+        check (std::fabs (l - 12.f) < 0.01f, "djfilter: DC back at -1 settles to the DC value within 0.5 s", l);
+    }
 }
