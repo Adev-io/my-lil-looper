@@ -5,7 +5,7 @@ plugins out of it). Run from the repo root.
 
 1. `make dist` (MSYS2), then `pwsh -File tools/rig/launch.ps1 -Patch tools/rig/patches/smoke.vcv -Extra Fundamental` → prints `pid=` and `dir=`.
 2. `pwsh -File tools/rig/cap.ps1 -ProcId <pid> -Name <name>` → full-window PNG in Desktop\screenshots.
-3. `click.ps1 -ProcId <pid> -ImgX <x> -ImgY <y> [-Button Right]`, `type.ps1 -ProcId <pid> -Text 5` (Enter is sent too).
+3. `click.ps1 -ProcId <pid> -ImgX <x> -ImgY <y> [-Button Right] [-HoldMs 2000]` (HoldMs holds the button down), `type.ps1 -ProcId <pid> -Text 5` (Enter is sent too).
 4. `stop.ps1 -Dir <dir>` closes that Rack and deletes the dir.
 
 click.ps1 moves the real cursor for ~0.4 s: don't run it while someone is using the mouse. Read click coordinates from
@@ -14,5 +14,6 @@ a full-window cap.ps1 shot, not a crop. Never trigger a native dialog: it blocks
 by the save/reload check, so launch from a copy in %TEMP% when testing saves.
 `patches/smoke_cv.vcv`: the same plus My lil Looper CV, a Fundamental LFO (triangle) into lane 1, lane 1 OUT into Scope
 IN 1 and the LFO into Scope IN 2.
+`patches/smoke_fx.vcv`: My lil Looper FX left of the Looper, a VCO saw into IN L, OUT L into Scope IN 1.
 Close any other running Rack first: Rack is single-instance, so launch.ps1 refuses while another Rack.exe is up, and
 click.ps1 only clicks a rig Rack (its -rig- user dir) showing its own window, never the user's Rack or a message box.

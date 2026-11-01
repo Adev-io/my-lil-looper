@@ -7,6 +7,9 @@
 #include "BlockPool.h"
 #include "CountIn.h"
 #include "CvLane.h"
+#include "DjFilter.h"
+#include "FxLink.hpp"
+#include "Scene.h"
 #include "Sync.h"
 #include "Track.h"
 #include "Wav.h"
@@ -39,6 +42,13 @@ struct Looper : Module
     FaceTap face;   // the mascot's mouth: the main out
     unsigned savedVersion[N] = {};
     uint32_t cvSeq = 0;           // the Looper CV message counter (core/CvLane.h)
+    // Looper FX on the left (core/Scene.h, core/FxHead.h, core/DjFilter.h): its messages land in fxMsg, the timing is ours.
+    FxLink fxMsg[2];
+    uint32_t lastFxSeq = 0, fxBackSeq = 0;
+    loop::FxTiming fxTiming;
+    loop::DjFilter filters[N];
+    float muteGain[N] = { 1.f, 1.f, 1.f, 1.f, 1.f };
+    int sinceBeat = 0, barMeasured = 0;   // frames since the last downbeat; frames between the last two
     uint32_t savedTake[N] = {};   // the patch's take ids, from dataFromJson for onAdd
     bool hasSavedTakes = false;
     uint32_t fileTake[N] = {};    // the take of each track's file on disk (last save or load; 0 = no file): dataToJson writes these
@@ -99,6 +109,8 @@ struct Looper : Module
         configBypass (IN_L_INPUT, OUT_L_OUTPUT);
         configBypass (IN_R_INPUT, OUT_R_OUTPUT);
         lightDiv.setDivision (64);
+        leftExpander.producerMessage = &fxMsg[0];
+        leftExpander.consumerMessage = &fxMsg[1];
         for (loop::Track& t : tracks) t.take = random::u32();   // a Looper CV moved from another Looper cannot match a take
         pool.refill();
         worker = std::thread ([this] {
@@ -127,6 +139,7 @@ struct Looper : Module
             appliedRate = args.sampleRate;
             appliedMinutes = maxMinutes;
             for (loop::Track& t : tracks) t.setSampleRate (appliedRate, 60.f * appliedMinutes);
+            for (loop::DjFilter& f : filters) f.setSampleRate (appliedRate);
         }
         sync.perBar = perBar;
 
@@ -144,7 +157,8 @@ struct Looper : Module
             t.reverse = params[REV_PARAM + i].getValue() > 0.5f;
             t.oneShot = params[ONESHOT_PARAM + i].getValue() > 0.5f;
             const bool rec = recBtn[i].process (params[REC_PARAM + i].getValue() > 0.f);
-            if (recTrig[i].process (trig (inputs[REC_INPUT], i), 0.1f, 1.f) || rec) t.pressRec (pool);
+            const bool overdubOff = fxTiming.speed[i] != 1 && t.state == loop::Track::PLAYING && ! t.oneShot;   // overdub at x1 only
+            if ((recTrig[i].process (trig (inputs[REC_INPUT], i), 0.1f, 1.f) || rec) && ! overdubOff) t.pressRec (pool);
             const bool held = params[STOP_PARAM + i].getValue() > 0.f;
             if (stopTrig[i].process (trig (inputs[STOP_INPUT], i), 0.1f, 1.f) || stopBtn[i].process (held)) t.pressStop();
             stopHeld[i] = held ? stopHeld[i] + args.sampleTime : 0.f;
@@ -161,6 +175,21 @@ struct Looper : Module
         const bool edge = clockTrig.process (inputs[CLOCK_INPUT].getVoltage(), 0.1f, 1.f);
         const bool beat = sync.tick (inputs[CLOCK_INPUT].isConnected(), edge, reset);
         if (reset) for (loop::Track& t : tracks) t.rewind();
+
+        // Looper FX: mutes, speeds and scenes take effect on our downbeats; no FX module = everything neutral at once.
+        const FxLink& fx = *(const FxLink*) leftExpander.consumerMessage;
+        const bool fxOn = leftExpander.module && leftExpander.module->model == modelLooperFX && fx.seq != lastFxSeq;
+        lastFxSeq = fx.seq;
+        if (beat) { if (sinceBeat > 0) barMeasured = sinceBeat + 1; sinceBeat = 0; }
+        else sinceBeat = (sinceBeat + 1) & 0x3fffffff;   // ponytail: only its remainder by a slice matters
+        const int twoSeconds = (int) (2.f * args.sampleRate);   // a bar when nothing is synced yet
+        const int barLen = sync.clocked ? (barMeasured > 0 ? barMeasured : twoSeconds) : sync.masterLen > 0 ? sync.masterLen : twoSeconds;
+        float levels[N];
+        for (int i = 0; i < N; ++i) levels[i] = params[LEVEL_PARAM + i].getValue();
+        if (fxOn) fxTiming.step (fx.mute, fx.speed, fx.reqId, fx.req, fx.ackId, beat, sync.synced(), barLen, levels);
+        else fxTiming.neutral();
+        if (fxTiming.gliding()) for (int i = 0; i < N; ++i) params[LEVEL_PARAM + i].setValue (fxTiming.value (i));   // the knobs turn
+        const float muteStep = 1.f / (0.005f * args.sampleRate);
 
         // Count-in: runs after the clock tick and before the tracks, so its REC press lands in the frame it is made.
         countIn.bars = TAKE_BARS[clamp ((int) std::round (params[BARS_PARAM].getValue()), 0, 3)];
@@ -195,8 +224,17 @@ struct Looper : Module
                 inL = own.getVoltage (0);
                 inR = own.getChannels() > 1 ? own.getVoltage (1) : inL;
             }
+            t.fx.speed = loop::speedOf (fxTiming.speed[i]);
+            t.fx.stut = fxOn && fx.stut[i];
+            t.fx.tape = fxOn && fx.tape[i];
+            t.fx.sliceT = std::max (1, barLen / (fxOn ? fx.stutDiv : 16));
+            t.fx.sinceBeat = sinceBeat;
             float l, r;
             t.process (inL, inR, beat, sync.synced(), pool, l, r);
+            filters[i].process (fxOn ? fx.filter[i] : 0.f, l, r);
+            muteGain[i] += clamp ((fxTiming.mute[i] ? 0.f : 1.f) - muteGain[i], -muteStep, muteStep);   // 5 ms
+            l *= muteGain[i];
+            r *= muteGain[i];
             if (t.justClosed && ! sync.synced()) sync.setMaster (t.len);
             allEmpty = allEmpty && t.state == loop::Track::EMPTY && t.pending == loop::Track::NONE;
             float g = params[LEVEL_PARAM + i].getValue();
@@ -221,8 +259,24 @@ struct Looper : Module
         {
             loop::CvLink* link = (loop::CvLink*) rightExpander.module->leftExpander.producerMessage;
             link->seq = ++cvSeq;
-            for (int i = 0; i < N; ++i) link->lane[i] = loop::cvMsg (tracks[i]);
+            for (int i = 0; i < N; ++i)
+            {
+                link->lane[i] = loop::cvMsg (tracks[i]);
+                if (fxTiming.mute[i]) link->lane[i].mode = loop::CvMsg::IDLE;   // a muted track's lane is silent too
+            }
             rightExpander.module->leftExpander.requestMessageFlip();
+        }
+
+        // The Looper FX on the left hears back: bar length, levels, the scene applied, the main out for its face.
+        if (leftExpander.module && leftExpander.module->model == modelLooperFX)
+        {
+            FxBack* back = (FxBack*) leftExpander.module->rightExpander.producerMessage;
+            back->seq = ++fxBackSeq;
+            back->barLen = barLen;
+            for (int i = 0; i < N; ++i) back->level[i] = params[LEVEL_PARAM + i].getValue();
+            back->applied = fxTiming.applied;
+            back->mainOut = clamp ((sumL + sumR) / 10.f, -1.f, 1.f);
+            leftExpander.module->rightExpander.requestMessageFlip();
         }
 
         if (lightDiv.process()) updateLights (args.sampleTime * lightDiv.getDivision(), anyRunning);
@@ -288,6 +342,8 @@ struct Looper : Module
         for (uint32_t& f : fileTake) f = 0;   // no track has a file now
         sync.clear();
         countIn.stop();
+        fxTiming.neutral();
+        for (int i = 0; i < N; ++i) { filters[i].reset(); muteGain[i] = 1.f; }
         ciTrack = -1;
         dubAfterRec = monitor = false;
         perBar = 4;
