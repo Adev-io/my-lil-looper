@@ -100,11 +100,36 @@ into lane 1 and record track 1: the loop keeps your voice, the lane keeps the no
 - Lanes are saved with the patch (one WAV per lane) and come back with their track's loop. A lane moved to another Looper
   does not play there.
 
+## My lil Looper FX (expander)
+
+Place **My lil Looper FX** directly to the LEFT of the Looper (Looper CV stays on the right). Each track gets a column:
+
+| Control | What it does |
+|---|---|
+| **FILTER** | DJ filter: left = low-pass (down to 80 Hz), right = high-pass (up to 8 kHz), centre = off. |
+| **x.5 x1 x2** | Speed, tape style (pitch moves with it). Changes on the next bar. Overdub works at x1 only. |
+| **MUTE** | Lit = playing. Mutes on the next bar; the track keeps its place, so it comes back in time. |
+| **STUT** (hold) | Repeats the slice that started on the last grid point (STUT LEN: 1/4 to 1/32 of a bar). Let go and the track is where it would have been. |
+| **TAPE** (hold) | Slows the track to a stop in 0.4 s. Let go: it spins back up and lands in time. |
+
+**Scenes:** eight pads. Hold one for 2 s to save the current mix (mutes, speeds, filters and the Looper's LEVEL knobs; it
+flashes magenta). Press a saved scene to recall it on the next bar: mutes and speeds switch on the 1, filters and levels
+glide over that bar (you see the knobs turn). The pad blinks while it waits, then stays lit. **SCENE** CV (0-10 V) picks
+scenes 1-8.
+
+**Jacks:** STUT and TAPE take poly gates (channel n = track n; patch My lil Mouth's TRIG out to beatbox stutters), FILTER
+takes poly CV (5 V = half the knob).
+
+- A bar is a clock bar with CLOCK patched, else the master loop; with nothing synced, changes happen at once.
+- Looper CV lanes follow the FX: their CV speeds up, stutters and tape-stops with the track; a muted track's lane is 0 V.
+- One-shot at x0.5 plays the first half of the loop, at x2 plays it twice.
+- Scenes are saved with the patch. Without the FX module (or when it is removed) every track plays plain.
+
 ## Building
 
 Rack SDK 2.6.6 and MSYS2 (Windows) or a Unix shell: `make` builds, `make test` runs the core checks, `make dist` packs
 the plugin. On Windows from PowerShell: `pwsh -File tools/mk.ps1 test`. Panel art: `py -3.11 tools/panel.py`
-(needs fontTools) writes `res/` and `src/layout.hpp`; `py -3.11 tools/panel_cv.py` writes the expander's `res/LooperCV.svg`
-and `src/layout_cv.hpp`.
+(needs fontTools) writes `res/` and `src/layout.hpp`; `py -3.11 tools/panel_cv.py` and `tools/panel_fx.py` write the
+expanders' panels and `src/layout_cv.hpp` / `src/layout_fx.hpp`.
 
 MIT licence. Author: Ari Klopfer / A_Development.
