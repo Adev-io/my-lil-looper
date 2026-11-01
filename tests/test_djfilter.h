@@ -118,4 +118,30 @@ void testDjFilter()
         for (int i = 0; i < 24000; ++i) { l = r = 12.f; f.process (-1.f, l, r); }
         check (std::fabs (l - 12.f) < 0.01f, "djfilter: DC back at -1 settles to the DC value within 0.5 s", l);
     }
+
+    // The knob +1 for 0.5 s, then centre for 2 s: back at centre bit for bit. A filter that swept must then match one that
+    // never did, so a flick to -1 starts from the same low-pass (a stuck denormal side would start it at 20 Hz).
+    {
+        const int sr = 48000;
+        DjFilter swept, fresh;
+        swept.setSampleRate ((float) sr);
+        fresh.setSampleRate ((float) sr);
+        for (int i = 0; i < sr / 2; ++i) { float l = 0.f, r = 0.f; swept.process (1.f, l, r); }
+        for (int i = 0; i < sr / 2; ++i) { float l = 0.f, r = 0.f; fresh.process (0.f, l, r); }
+        std::mt19937 rng (13);
+        std::uniform_real_distribution<float> u (-5.f, 5.f);
+        bool bypass = true, same = true;
+        for (int i = 0; i < 2 * sr + sr / 4; ++i)
+        {
+            const float knob = i < 2 * sr ? 0.f : -1.f;
+            const float a = u (rng), b = u (rng);
+            float l = a, r = b, fl = a, fr = b;
+            swept.process (knob, l, r);
+            fresh.process (knob, fl, fr);
+            if (i >= sr + sr / 2 && i < 2 * sr) bypass = bypass && l == a && r == b;
+            if (i >= 2 * sr) same = same && l == fl && r == fr;
+        }
+        check (bypass, "djfilter: centre after a sweep to +1 comes back bit for bit");
+        check (same, "djfilter: after a sweep to +1 and centre, a flick to -1 matches a filter that never swept");
+    }
 }

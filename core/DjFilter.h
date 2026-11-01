@@ -26,6 +26,7 @@ struct DjFilter
     void process (float knob, float& l, float& r)
     {
         x += smooth * (std::min (1.f, std::max (-1.f, knob)) - x);
+        if (std::fabs (x) < 1e-20f) x = 0.f;   // a sweep decays into denormals and never lands: the side must read centre
         const bool hp = x > 0.f;
         // the target cutoff (pow, log) only when the knob moved or changed side
         if (stale || hp != cachedHp || std::fabs (x - cachedX) > 1e-6f)
